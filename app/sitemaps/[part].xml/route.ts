@@ -1,12 +1,14 @@
-// app/sitemaps/[part]/route.ts
+// app/sitemaps/[part].xml/route.ts
 import { NextResponse } from "next/server";
 import { CATEGORIES } from "@/lib/categories";
 import { buildCanonicalPath, canonicalSegmentsFromSelections } from "@/lib/url";
 
+export const dynamic = "force-dynamic";
+
 const BASE = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
 const MAX_PER_SITEMAP = 49000;
 
-// --- same helpers as index ---
+// --- same helpers as before ---
 function pathForAnd(catKey: string, slugs: string[]) {
   const segs = canonicalSegmentsFromSelections({ byCat: { [catKey]: { and: slugs } } });
   return buildCanonicalPath(segs);

@@ -5,6 +5,8 @@ import { buildCanonicalPath, canonicalSegmentsFromSelections } from "@/lib/url";
 
 const BASE = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
 const MAX_PER_SITEMAP = 49000;
+export const dynamic = "force-dynamic";
+
 
 // --- helpers (AND-only inputs for canonicalSegments) ---
 function pathForAnd(catKey: string, slugs: string[]) {
