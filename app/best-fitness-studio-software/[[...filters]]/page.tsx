@@ -527,49 +527,7 @@ export default async function Page({ params, searchParams }: PageProps) {
           )}
         </section>
 
-        {/* ======== Table (kept; columns limited to active categories) ======== */}
-        <div className="overflow-x-auto border border-black/10 rounded-lg">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-black/10 align-top">
-                <th className="text-left p-3 w-[220px]">Name</th>
-                <th className="text-left p-3 w-[340px]">Additional Info</th>
-                {visibleCats.map((cat) => (
-                  <th key={cat.key} className="text-left p-3 min-w-[260px]">
-                    {cat.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td className="p-3" colSpan={2 + visibleCats.length}>
-                    No results match these filters.
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((row) => (
-                  <tr key={row.id} className="border-t border-black/10 align-top">
-                    <td className="p-3">
-                      <a href={row.url} className="underline underline-offset-4">
-                        {row.name}
-                      </a>
-                    </td>
-                    <td className="p-3">
-                      <AdditionalInfoCell text={row.additionalInfo} />
-                    </td>
-                    {visibleCats.map((cat) => (
-                      <td key={cat.key} className="p-3">
-                        <CategoryCell row={row} catKey={cat.key} />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+  
 
         {/* ======== Buying guide + methodology (SEO content) ======== */}
         <section className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6">
