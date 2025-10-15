@@ -1,4 +1,3 @@
-// app/sitemaps/[part].xml/route.ts
 import { NextResponse } from "next/server";
 import { CATEGORIES } from "@/lib/categories";
 import { buildCanonicalPath, canonicalSegmentsFromSelections } from "@/lib/url";
@@ -8,7 +7,7 @@ export const dynamic = "force-dynamic";
 const BASE = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
 const MAX_PER_SITEMAP = 49000;
 
-// --- same helpers as before ---
+// --- helpers (same as index) ---
 function pathForAnd(catKey: string, slugs: string[]) {
   const segs = canonicalSegmentsFromSelections({ byCat: { [catKey]: { and: slugs } } });
   return buildCanonicalPath(segs);
@@ -61,9 +60,10 @@ function generateAllCanonicalPaths(): string[] {
 
 export async function GET(
   _req: Request,
-  ctx: { params: { part: string } }
+  ctx: { params: Promise<{ part: string }> } // <-- params is a Promise in Next 15
 ) {
-  const idx = Number(ctx.params.part);
+  const { part } = await ctx.params;        // <-- await it
+  const idx = Number(part);
   if (!Number.isFinite(idx) || idx < 0) {
     return new NextResponse("Not found", { status: 404 });
   }

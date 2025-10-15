@@ -1,12 +1,11 @@
-// app/sitemap.xml/route.ts
 import { NextResponse } from "next/server";
 import { CATEGORIES } from "@/lib/categories";
 import { buildCanonicalPath, canonicalSegmentsFromSelections } from "@/lib/url";
 
-const BASE = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
-const MAX_PER_SITEMAP = 49000;
 export const dynamic = "force-dynamic";
 
+const BASE = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const MAX_PER_SITEMAP = 49000;
 
 // --- helpers (AND-only inputs for canonicalSegments) ---
 function pathForAnd(catKey: string, slugs: string[]) {
@@ -70,12 +69,12 @@ export async function GET() {
   const parts = Math.ceil(allPaths.length / MAX_PER_SITEMAP);
   const now = new Date().toISOString();
 
-  // Build a sitemap index referencing /sitemaps/{i}.xml
+  // Build a sitemap index referencing /sitemaps/{i} (no .xml on child routes)
   const body =
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` +
     Array.from({ length: parts }, (_, i) => {
-      const loc = `${BASE}/sitemaps/${i}.xml`;
+      const loc = `${BASE}/sitemaps/${i}`;
       return `<sitemap><loc>${loc}</loc><lastmod>${now}</lastmod></sitemap>`;
     }).join("") +
     `</sitemapindex>`;
