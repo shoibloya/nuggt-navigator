@@ -5945,6 +5945,275 @@ export const ROWS: Row[] = [
       { slug: "sms-marketing", note: "Manual SMS to clients via credits." }
     ]
   }
+},
+{
+  id: "vibefam",
+  name: "Vibefam",
+  url: "https://vibefam.com/",
+  additionalInfo: [
+    "VibePay (Tap to Pay POS on Android) — built-in, no extra terminal: create payment on phone, take NFC card tap, email receipt, reconcile instantly. iOS “coming soon.” (support.vibefam.com)",
+    "Spot-based floor plans — generate and drag-drop seat/spot maps (e.g., spin bikes / reformers) with per-spot capacity and ClassPass spot control. (support.vibefam.com)",
+    "Family Accounts — true parent/child profiles with package assignment and family bookings (notifications to parent). (support.vibefam.com)",
+    "Lead Management + Referrals with performance fees — optional add-on where Vibefam charges 5% of converted leads and 10% for successful referrals (instead of flat SaaS upsell). (vibefam.com)",
+    "AI dashboards & forecasting — churn prediction, package sales forecast, booking forecasts (7-day & 6-month). (support.vibefam.com)",
+    "Credit card expiry notifications — proactively reduces failed recurring payments. (vibefam.com)",
+    "Calendar sync (Google) for appointments & member reminders — emphasized in product pages. (vibefam.com)",
+    "Third-party marketplaces — integrations with ClassPass and 1Fit (plan-dependent). (support.vibefam.com)",
+    "Quotation in local currency — pricing FAQ (“quotation in your local currency”). (vibefam.com)"
+  ].join("\n"),
+  optionNotes: {
+    "booking-channels": [
+      { slug: "branded-microsite", note: "Branded microsite (studio booking website) — studios can “Setup Booking Website” and customize it. (support.vibefam.com)" },
+      { slug: "website-widget", note: "“Website Integration” listed on the Professional plan (embed booking into your own site). (vibefam.com)" },
+      { slug: "ios-app", note: "Member iOS app; also “Custom Branded App” available. (vibefam.com)" },
+      { slug: "android-app", note: "Member Android app; also “Custom Branded App” available. (vibefam.com)" },
+      { slug: "phone-in-person-entry", note: "Admins can add private classes for members and manage bookings from the business/admin app. (support.vibefam.com)" },
+      { slug: "facebook-instagram-booking", note: "Can’t find information (integrate with Meta for leads/marketing, not direct booking). (vibefam.com)" },
+      { slug: "google-reserve", note: "Can’t find information" },
+      { slug: "kiosk-self-service", note: "Can’t find information" },
+      { slug: "embedded-iframe", note: "Can’t find information (only “Website Integration” explicitly stated). (vibefam.com)" },
+      { slug: "custom-portal-via-api", note: "Can’t find information" }
+    ],
+    "class-types": [
+      { slug: "drop-in-single-session", note: "“Drop-in passes” under Membership Management. (vibefam.com)" },
+      { slug: "course-multi-session-series", note: "“Schedule Courses” (Pro plan) and course scheduling guide. (vibefam.com)" },
+      { slug: "workshops-events", note: "Courses doc mentions events & workshops. (support.vibefam.com)" },
+      { slug: "private-1-1", note: "“Private Class” flow. (support.vibefam.com)" },
+      { slug: "semi-private-small-group", note: "Can’t find information (group bookings exist but not marketed as semi-private). (support.vibefam.com)" },
+      { slug: "virtual-live-video", note: "Add Zoom/virtual link; auto-sent in confirmation. (support.vibefam.com)" },
+      { slug: "on-demand-recorded-content", note: "Can’t find information" }
+    ],
+    "recurrence": [
+      { slug: "recurring-classes", note: "Recurring patterns available. (support.vibefam.com)" },
+      { slug: "rolling-enrollments", note: "Can’t find information" },
+      { slug: "fixed-date-courses", note: "Yes (term classes / fixed dates). (support.vibefam.com)" },
+      { slug: "waitlist-for-courses", note: "Can’t find information (classes support waitlist; course-specific not stated). (vibefam.com)" }
+    ],
+    "capacity-and-time-controls": [
+      { slug: "capacity-limit", note: "Floor plans and capacity control. (support.vibefam.com)" },
+      { slug: "equipment-based-capacity", note: "“Real-Time Class Spots Booking” (bike/reformer spot maps). (vibefam.com)" },
+      { slug: "overbooking-allowance", note: "Can’t find information" },
+      { slug: "waitlist", note: "Built-in waitlist. (vibefam.com)" },
+      { slug: "auto-promotion-from-waitlist", note: "“Auto waitlist backfill” mentioned. (vibefam.com)" },
+      { slug: "booking-window-open-close", note: "Release period / days before class. (support.vibefam.com)" },
+      { slug: "cut-off-time-before-start", note: "Booking deadline (hours before class). (support.vibefam.com)" },
+      { slug: "late-cancel-rules", note: "Cancellation policy settings. (support.vibefam.com)" },
+      { slug: "no-show-fee", note: "Optional no-show fee per package. (support.vibefam.com)" },
+      { slug: "grace-periods", note: "Can’t find information" },
+      { slug: "buffer-times-between-classes", note: "Can’t find information" }
+    ],
+    "resource-allocation": [
+      { slug: "rooms-locations", note: "Multi-location setup. (support.vibefam.com)" },
+      { slug: "equipment", note: "Assign equipment and avoid overbooking (marketing page). (vibefam.com)" },
+      { slug: "instructors", note: "Assign instructors; instructor performance reports. (support.vibefam.com)" },
+      { slug: "multiple-resources-per-booking", note: "Can’t find information" },
+      { slug: "conflict-detection-prevention", note: "Implied by equipment/instructor assignment without overbooking; not explicitly documented — can’t find information. (vibefam.com)" }
+    ],
+    "calendar-sync": [
+      { slug: "google-calendar-2-way", note: "“Syncs with Google Calendar” for members/appts (marketing pages). (vibefam.com)" },
+      { slug: "outlook-2-way", note: "Claimed on comparisons/alt pages. (vibefam.com)" },
+      { slug: "icloud-2-way", note: "Referenced as “iCal” on alt page. (vibefam.com)" },
+      { slug: "ics-feed-1-way", note: "Can’t find information" }
+    ],
+    "check-in-and-access": [
+      { slug: "staff-check-in", note: "Instructors use business/admin app for attendance-taking. (support.vibefam.com)" },
+      { slug: "mobile-app-check-in", note: "Can’t find information (member self check-in not documented)" },
+      { slug: "kiosk-ipad-check-in", note: "Can’t find information" },
+      { slug: "qr-code-barcode-scanning", note: "Can’t find information" },
+      { slug: "nfc-rfid", note: "Can’t find information (NFC is for Tap to Pay, not door access). (support.vibefam.com)" },
+      { slug: "turnstile-door-access-integration", note: "Can’t find information" }
+    ],
+    "forms-and-waivers": [
+      { slug: "custom-intake-forms", note: "“Customize Sign Up Form” (Pro plan). (vibefam.com)" },
+      { slug: "conditional-logic", note: "Can’t find information" },
+      { slug: "e-sign-waivers", note: "“Membership Agreement” shown before purchase and emailed as PDF. (support.vibefam.com)" },
+      { slug: "health-screening", note: "Can’t find information" },
+      { slug: "parental-consent", note: "Can’t find information" },
+      { slug: "photo-video-consent", note: "Can’t find information" },
+      { slug: "per-class-forms", note: "Can’t find information" },
+      { slug: "custom-fields", note: "Can’t find information (beyond general signup form customization)" }
+    ],
+    "booking-models": [
+      { slug: "guest-checkout", note: "Can’t find information" },
+      { slug: "account-required", note: "Member accounts & sign-up needed. (support.vibefam.com)" },
+      { slug: "family-group-bookings", note: "Family & group bookings supported. (support.vibefam.com)" },
+      { slug: "corporate-team-bookings", note: "Can’t find information (corporate wellness content exists, not a booking model). (vibefam.com)" },
+      { slug: "multi-attendee-in-one-booking", note: "Via group bookings. (support.vibefam.com)" },
+      { slug: "add-on-upsells-at-checkout", note: "Can’t find information" }
+    ],
+    "notifications": [
+      { slug: "email-reminders", note: "Automated emails (booking, expiry, reminders). (support.vibefam.com)" },
+      { slug: "sms-reminders", note: "Can’t find information" },
+      { slug: "push-notifications", note: "In-app/mobile notifications. (support.vibefam.com)" },
+      { slug: "whatsapp-notifications", note: "Can’t find information" },
+      { slug: "two-way-sms", note: "Can’t find information" },
+      { slug: "custom-templates", note: "“Customize Emails” (Pro plan). (vibefam.com)" },
+      { slug: "automated-waitlist-messages", note: "Implied by waitlist/auto-fill; explicit messaging not documented — can’t find information. (vibefam.com)" }
+    ],
+    "payment-gateways": [
+      { slug: "stripe", note: "Online payments setup guide. (support.vibefam.com)" },
+      { slug: "xendit", note: "Integration supported (SEA local methods)." },
+      { slug: "paypal", note: "Can’t find information" },
+      { slug: "square", note: "Can’t find information" },
+      { slug: "adyen", note: "Can’t find information" },
+      { slug: "braintree", note: "Can’t find information" },
+      { slug: "authorize-net", note: "Can’t find information" },
+      { slug: "worldpay", note: "Can’t find information" },
+      { slug: "mollie", note: "Can’t find information" },
+      { slug: "razorpay", note: "Can’t find information" },
+      { slug: "paystack", note: "Can’t find information" },
+      { slug: "payu", note: "Can’t find information" },
+      { slug: "mercado-pago", note: "Can’t find information" },
+      { slug: "2checkout", note: "Can’t find information" },
+      { slug: "checkout-com", note: "Can’t find information" },
+      { slug: "klarna-payments", note: "Can’t find information" }
+    ],
+    "payment-methods": [
+      { slug: "credit-debit-cards-visa-mastercard-amex-discover", note: "Listed on homepage under “Sell with Local Payment Methods.” (vibefam.com)" },
+      { slug: "apple-pay", note: "Listed on homepage “Sell with Local Payment Methods.” (vibefam.com)" },
+      { slug: "google-pay", note: "Listed on homepage “Sell with Local Payment Methods.” (vibefam.com)" },
+      { slug: "paynow-sg", note: "Supported via Xendit (regional). (vibefam.com)" },
+      { slug: "grabpay", note: "Supported via Xendit (regional). (vibefam.com)" },
+      { slug: "fpx-my", note: "Supported via Xendit (regional). (vibefam.com)" },
+      { slug: "alipay", note: "Supported via Xendit (regional). (vibefam.com)" },
+      { slug: "wechat-pay", note: "Supported via Xendit (regional). (vibefam.com)" },
+      { slug: "bank-transfer", note: "Can’t find information" },
+      { slug: "sepa-direct-debit", note: "Can’t find information" },
+      { slug: "ach-debit", note: "Can’t find information" },
+      { slug: "ideal", note: "Can’t find information" },
+      { slug: "bancontact", note: "Can’t find information" },
+      { slug: "eps", note: "Can’t find information" },
+      { slug: "giropay", note: "Can’t find information" },
+      { slug: "przelewy24", note: "Can’t find information" },
+      { slug: "pix", note: "Can’t find information" },
+      { slug: "boleto", note: "Can’t find information" },
+      { slug: "cheque", note: "Can’t find information" },
+      { slug: "buy-now-pay-later", note: "Can’t find information" },
+      { slug: "cash", note: "Can’t find information (no explicit cash register/record flow shown)" }
+    ],
+    "point-of-sale-in-person": [
+      { slug: "tap-to-pay", note: "Tap to Pay on Android via VibePay (no extra terminal). iOS “coming soon.” (support.vibefam.com)" },
+      { slug: "card-reader", note: "Can’t find information" },
+      { slug: "receipt-printer", note: "Can’t find information (email receipts mentioned; no printer hardware page). (support.vibefam.com)" },
+      { slug: "barcode-scanner", note: "Can’t find information" }
+    ],
+    "pricing-models": [
+      { slug: "single-class", note: "Drop-in supported. (vibefam.com)" },
+      { slug: "class-packs-punch-cards", note: "“Class packages” with credits & expiry. (support.vibefam.com)" },
+      { slug: "memberships-subscriptions", note: "Recurring memberships & auto-renewals. (vibefam.com)" },
+      { slug: "intro-offers", note: "Trial packages referenced in lead/referral docs. (support.vibefam.com)" }
+    ],
+    "billing-and-collections": [
+      { slug: "recurring-billing", note: "Memberships with automated renewals. (vibefam.com)" },
+      { slug: "dunning-retry-logic", note: "Credit-card expiry notifications to prevent failed recurring payments. (vibefam.com)" },
+      { slug: "proration", note: "Can’t find information" },
+      { slug: "partial-payments", note: "Can’t find information" },
+      { slug: "deposits", note: "Can’t find information" },
+      { slug: "split-payments", note: "Can’t find information" },
+      { slug: "installments", note: "Can’t find information" }
+    ],
+    "taxes-and-invoicing": [
+      { slug: "invoices", note: "Customizable member receipts after purchase. (support.vibefam.com)" },
+      { slug: "vat-gst-hst", note: "Can’t find information" },
+      { slug: "multiple-tax-rates", note: "Can’t find information" },
+      { slug: "tax-inclusive-exclusive", note: "Can’t find information" },
+      { slug: "automatic-tax-calculation", note: "Can’t find information" },
+      { slug: "fiscal-receipts", note: "Can’t find information" },
+      { slug: "quotes", note: "Can’t find information" },
+      { slug: "credit-notes", note: "Can’t find information" },
+      { slug: "purchase-orders", note: "Can’t find information" }
+    ],
+    "discounts-and-credits": [
+      { slug: "coupon-codes", note: "Promo/coupon codes (Most Popular plan); also in referral rewards. (vibefam.com)" },
+      { slug: "auto-discounts", note: "Can’t find information" },
+      { slug: "volume-discounts", note: "Can’t find information" },
+      { slug: "referral-discounts", note: "Referral program can reward money-off/free classes. (support.vibefam.com)" },
+      { slug: "loyalty-points-redemption", note: "Can’t find information" },
+      { slug: "gift-cards", note: "Gift packages seen on live booking pages. (VibeFam Bookings)" },
+      { slug: "store-credit", note: "Can’t find information" }
+    ],
+    "risk-and-compliance": [
+      { slug: "pci-dss-compliance", note: "VibePay processes NFC card payments; explicit PCI text not on page — marking conservatively as can’t find information. (support.vibefam.com)" },
+      { slug: "3-d-secure-sca", note: "Can’t find information" },
+      { slug: "avs-address-verification", note: "Can’t find information" },
+      { slug: "chargeback-management", note: "Can’t find information" },
+      { slug: "risk-scoring-fraud-checks", note: "Can’t find information" }
+    ],
+    "currency": [
+      { slug: "multi-currency-pricing", note: "Can’t find information (sales-side quotation can be in local currency). (vibefam.com)" },
+      { slug: "fx-conversion-at-checkout", note: "Can’t find information" },
+      { slug: "settlement-currency-selection", note: "Can’t find information" }
+    ],
+    "profiles": [
+      { slug: "family-accounts", note: "Parent/child with package assignment; family bookings. (support.vibefam.com)" },
+      { slug: "corporate-accounts", note: "Can’t find information" },
+      { slug: "emergency-contacts", note: "Can’t find information" },
+      { slug: "medical-notes", note: "Can’t find information" },
+      { slug: "tags-segments", note: "Can’t find information" }
+    ],
+    "memberships": [
+      { slug: "contract-terms", note: "Customizable membership/purchase agreement before checkout. (support.vibefam.com)" },
+      { slug: "cancellation-policies", note: "Central policy with hours before start & penalties. (support.vibefam.com)" },
+      { slug: "usage-limits", note: "Booking limits per period (e.g., X per day/week). (support.vibefam.com)" },
+      { slug: "freezes-holds", note: "Can’t find information" },
+      { slug: "carryover-rules", note: "Can’t find information" },
+      { slug: "access-control-by-membership", note: "Can’t find information" }
+    ],
+    "passes": [
+      { slug: "class-packs", note: "Credits-based packages with custom validity. (support.vibefam.com)" },
+      { slug: "expiration-rules", note: "Validity start modes (from purchase / after first booking / fixed date). (support.vibefam.com)" },
+      { slug: "shareable-passes", note: "Enable package sharing with limits. (support.vibefam.com)" },
+      { slug: "transfer-rules", note: "Can’t find information" }
+    ],
+    "loyalty-and-referral": [
+      { slug: "referrals", note: "Built-in referral program with analytics; performance-fee option. (support.vibefam.com / vibefam.com)" },
+      { slug: "points", note: "Can’t find information" }
+    ],
+    "gift-cards": [
+      { slug: "digital-gift-cards", note: "Gift packages visible on booking site (digital flow). (VibeFam Bookings)" },
+      { slug: "balance-management", note: "Balance handled via standard purchase/usage. (VibeFam Bookings)" },
+      { slug: "physical-gift-cards", note: "Can’t find information" },
+      { slug: "scheduled-delivery", note: "Can’t find information" }
+    ],
+    "community": [
+      { slug: "forums-groups", note: "Can’t find information" }
+    ],
+    "admin-and-permissions": [
+      { slug: "role-based-permissions", note: "Access rights customisations (Most Popular plan). (vibefam.com)" },
+      { slug: "field-level-permissions", note: "Can’t find information" },
+      { slug: "audit-logs", note: "Can’t find information" }
+    ],
+    "scheduling-and-availability": [
+      { slug: "staff-scheduling", note: "Full schedule management incl. instructors & calendars. (support.vibefam.com)" },
+      { slug: "availability-rules", note: "Can’t find information" },
+      { slug: "time-off", note: "Can’t find information" }
+    ],
+    "compensation": [
+      { slug: "payroll-export", note: "Instructor payrolls supported; reporting dashboards & exports. (vibefam.com)" },
+      { slug: "commission-structures", note: "Can’t find information" },
+      { slug: "tips", note: "Can’t find information" },
+      { slug: "performance-dashboards", note: "Performance dashboards present. (support.vibefam.com)" }
+    ],
+    "crm-and-lead-management": [
+      { slug: "contact-crm", note: "Manage members & leads in portal. (support.vibefam.com)" },
+      { slug: "lead-capture-forms", note: "Leads from booking site/app/social ads; capture sources configurable. (support.vibefam.com)" },
+      { slug: "lead-pipeline-stages", note: "Leads overview & conversion reporting. (support.vibefam.com)" }
+    ],
+    "campaigns": [
+      { slug: "email-marketing", note: "Pro plan includes Email Marketing & templates; lead automations (drip timing). (vibefam.com)" },
+      { slug: "sms-marketing", note: "Can’t find information" },
+      { slug: "marketing-automation", note: "Lead automations, drip timing. (vibefam.com)" },
+      { slug: "abandoned-booking-recovery", note: "“Abandoned Cart” emails. (support.vibefam.com)" },
+      { slug: "promo-codes", note: "Promo codes supported. (vibefam.com)" },
+      { slug: "landing-pages", note: "Can’t find information" },
+      { slug: "seo-tools", note: "Can’t find information" }
+    ],
+    "ads-and-tracking": [
+      { slug: "facebook-ads-pixel", note: "Can’t find information (integrate with Meta for leads; no pixel setup doc). (vibefam.com)" },
+      { slug: "google-ads-conversion", note: "Can’t find information" }
+    ]
+  }
 }
+
 
 ];
