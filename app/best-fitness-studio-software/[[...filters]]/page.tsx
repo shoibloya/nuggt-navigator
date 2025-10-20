@@ -1,10 +1,11 @@
 //app/best-fitness-studio-software/[[...filters]]/page.tsx
 
-import { redirect } from "next/navigation";
+import { redirect, permanentRedirect } from "next/navigation";
 import { CATEGORIES } from "@/lib/categories";
 import { ROWS, Row } from "@/lib/data";
 import {
   parseSelectionsFromPath,
+  parseSelectionsFromSearchParams,    // <— re-enable param parsing
   canonicalSegmentsFromSelections,
   titleFromSelections,
   descriptionFromSelections,
@@ -17,6 +18,7 @@ export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ filters?: string[] }>;
+  searchParams: Promise<ReadonlyURLSearchParams | Record<string, string | string[] | undefined>>;
 };
 
 // Server-side logger
@@ -115,12 +117,10 @@ function NoteWithLinks({ text }: { text: string }) {
     }
     last = m.index + parenText.length;
   }
-  // use parentheses, not bracket indexing
   const after = text.slice(last);
   if (after) nodes.push(after);
   return <>{nodes}</>;
 }
-
 
 /* ---------- UI cells ---------- */
 
@@ -156,42 +156,7 @@ function AdditionalInfoCell({ text }: { text?: string }) {
   );
 }
 
-/* ========================== AI Instructions copy (kept EXACTLY the same) ============================ */
-const CATEGORY_DEFINITIONS: Record<string, string> = {
-  "booking-channels": "Where and how clients can browse, book, and pay.",
-  "class-types": "Kinds of offerings the platform supports (classes, privates, events, etc.).",
-  "recurrence": "Ways to schedule repeating or fixed-date programs and enrollments.",
-  "capacity-and-time-controls": "Controls for class size, waitlists, timing and cancellation rules.",
-  "resource-allocation": "Scheduling facilities, staff, and equipment without conflicts.",
-  "calendar-sync": "Sync options to external calendars.",
-  "check-in-and-access": "Onsite entry/check-in methods and access control.",
-  "forms-and-waivers": "Data capture, waivers, and consent workflows.",
-  "booking-models": "Account/guest flows and multi-attendee options.",
-  "notifications": "System emails, texts, pushes, and waitlist messages.",
-  "payment-gateways": "Payment processors supported natively.",
-  "payment-methods": "Payment methods clients can use online or in person.",
-  "point-of-sale-in-person": "In-person POS hardware capabilities.",
-  "pricing-models": "How you can price and package your services.",
-  "billing-and-collections": "Recurring billing, retries, proration and related flows.",
-  "taxes-and-invoicing": "Tax settings and invoicing features.",
-  "discounts-and-credits": "Coupons, gift cards, and other credits/discounts.",
-  "risk-and-compliance": "Security, SCA/3DS, PCI, and fraud-related items.",
-  "profiles": "Client profile fields and segmentation.",
-  "memberships": "Membership rules like contracts, freezes, and access.",
-  "passes": "Packs/punch cards and related rules.",
-  "loyalty-and-referral": "Points, referrals, rewards.",
-  "gift-cards": "Gift card capabilities.",
-  "community": "Social community features.",
-  "admin-and-permissions": "Admin roles and audit capabilities.",
-  "scheduling-and-availability": "Staff availability, time off, and scheduling.",
-  "compensation": "Payroll, commissions, tips reporting.",
-  "crm-and-lead-management": "CRM, lead capture and pipeline.",
-  "campaigns": "Email/SMS marketing & automation tools.",
-  "ads-and-tracking": "Ads pixels and analytics tracking.",
-};
-/* =================================================================================== */
-
-/* ---------- SEO helpers for prose ---------- */
+/* ========================== SEO helper ========================== */
 const optionLabel = (catKey: string, slug: string) => {
   const cat = CATEGORIES.find((c) => c.key === catKey);
   const opt = cat?.options.find((o) => o.slug === slug);
@@ -209,80 +174,53 @@ const activeFilterSentences = (sel: Selections) => {
   return parts;
 };
 
-/* ========================== NEW: Server Action (SSR-only filtering) ========================== */
-async function applyFilters(formData: FormData) {
-  "use server";
-  // Build selections from posted checkbox values (AND within each category)
-  const byCat: Record<string, { and: string[] }> = {};
-  for (const cat of CATEGORIES) {
-    const raw = formData.getAll(cat.key).map(String);
-    if (raw.length === 0) continue;
-    const allowed = new Set(cat.options.map((o) => o.slug));
-    const and = Array.from(new Set(raw.filter((s) => allowed.has(s))));
-    if (and.length > 0) byCat[cat.key] = { and };
-  }
-  const segs = canonicalSegmentsFromSelections({ byCat });
-  const target = buildCanonicalPath(segs);
-  redirect(target);
+/* ========================== Machine-readable Filter Spec ========================== */
+function buildFilterSpecJSON(basePath: string) {
+  return {
+    version: 1,
+    basePath,
+    pathPattern: "{basePath}/{catKey}-{slug}[/...]; within-category joiner: '-and-'; category order = CATEGORIES order",
+    joiners: { withinCategory: "-and-", betweenCategories: "/" },
+    categories: CATEGORIES.map((c) => ({
+      key: c.key,
+      label: c.label,
+      options: c.options.map((o) => o.slug),
+    })),
+    acceptedQueryParams: CATEGORIES.map((c) => c.key),
+    behavior: "GET query params are accepted and will be 301/302 redirected to canonical path-only URL.",
+  };
 }
 
-/* ========================== NEW: Expansion Links (crawl hints) ========================== */
-
-function buildExpansionGroups(sel: Selections): Array<{
-  catKey: string;
-  catLabel: string;
-  links: Array<{ href: string; text: string }>;
-}> {
-  const groups: Array<{ catKey: string; catLabel: string; links: Array<{ href: string; text: string }> }> = [];
-  const currentByCat = sel.byCat;
-
-  for (const cat of CATEGORIES) {
-    const current = new Set(currentByCat[cat.key]?.and ?? []);
-    const links: Array<{ href: string; text: string }> = [];
-
-    for (const opt of cat.options) {
-      if (current.has(opt.slug)) continue; // only show additions
-      const nextSel: Selections = {
-        byCat: Object.fromEntries(
-          Object.entries(currentByCat).map(([k, v]) => [k, { and: Array.from(new Set(v.and ?? [])) }])
-        ) as Record<string, { and: string[] }>,
-      };
-      const existing = nextSel.byCat[cat.key]?.and ?? [];
-      nextSel.byCat[cat.key] = { and: Array.from(new Set([...existing, opt.slug])) };
-
-      const segs = canonicalSegmentsFromSelections(nextSel);
-      const href = buildCanonicalPath(segs);
-      links.push({ href, text: `Add ${opt.label}` });
-    }
-
-    groups.push({ catKey: cat.key, catLabel: cat.label, links });
-  }
-
-  return groups;
-}
-
-export default async function Page({ params }: PageProps) {
+export default async function Page({ params, searchParams }: PageProps) {
   const resolvedParams = await params;
+  const resolvedSearchParams = await searchParams;
 
   slog("incoming params.filters", resolvedParams.filters ?? []);
+  slog("incoming searchParams", resolvedSearchParams);
 
-  // 1) Parse from path only (NO query string support)
+  // 1) Accept SGCarmart-style query params and canonicalize to path
+  const fromQuery = parseSelectionsFromSearchParams(resolvedSearchParams);
+  const segsFromQuery = canonicalSegmentsFromSelections(fromQuery);
+  if (segsFromQuery.length > 0) {
+    const target = buildCanonicalPath(segsFromQuery);
+    slog("redirecting (query -> path canonical)", target);
+    // Use permanent redirect for stronger consolidation
+    permanentRedirect(target);
+  }
+
+  // 2) Parse from path only
   const selections = parseSelectionsFromPath(resolvedParams.filters);
-  slog("fromPath.byCat", selections.byCat);
-
-  // 2) Ensure canonical path for path-based selections
   const canonicalSegs = canonicalSegmentsFromSelections(selections);
   const canonicalPath = buildCanonicalPath(canonicalSegs);
   const incomingPath =
     resolvedParams.filters?.length
       ? `/best-fitness-studio-software/${resolvedParams.filters.join("/")}`
       : "/best-fitness-studio-software";
-  slog("incomingPath", incomingPath);
-  slog("canonicalPath", canonicalPath);
 
   if (incomingPath !== canonicalPath) {
     slog("redirecting (path canonicalize)", canonicalPath);
-    redirect(canonicalPath);
+    // Use permanent redirect for non-canonical path variants
+    permanentRedirect(canonicalPath);
   }
 
   // 3) SEO text
@@ -300,28 +238,9 @@ export default async function Page({ params }: PageProps) {
   });
   const visibleCats =
     activeCatKeys.length === 0 ? CATEGORIES : CATEGORIES.filter((c) => activeCatKeys.includes(c.key));
-  slog("visibleCats", activeCatKeys.length === 0 ? "ALL" : activeCatKeys);
 
   /* ======== JSON-LD (additional SEO) ======== */
   const faqLD = [
-    {
-      "@type": "Question",
-      name: "How do I filter this page?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text:
-          "Use the on-page checkboxes and submit to update. Each combination redirects to a dedicated URL so you can compare options quickly.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "What does a selected option mean?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text:
-          "Selecting an option (e.g., Apple Pay under Payment methods) filters to software that supports that capability. All selections are combined with AND logic.",
-      },
-    },
     {
       "@type": "Question",
       name: "What happens if I don't set any filters?",
@@ -367,32 +286,83 @@ export default async function Page({ params }: PageProps) {
   const base = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "");
   const canonicalHref = base ? `${base}${canonicalPath}` : canonicalPath;
 
-  /* ========================== NEW: Build expansion link groups ========================== */
-  const expansionGroups = buildExpansionGroups(selections);
+  /* Build machine-readable filter spec JSON and HTML comment payload */
+  const filterSpec = buildFilterSpecJSON("/best-fitness-studio-software");
+  const filterSpecComment =
+    `<!-- FILTER_SPEC: ${JSON.stringify(filterSpec)} -->`;
+
+  /* Build schema.org potentialAction with EntryPoint urlTemplate for query params */
+  const queryTemplate = (() => {
+    // Build "{?cat1*,cat2*,...}" RFC6570-style list template using category keys
+    const keys = CATEGORIES.map((c) => c.key).join("*,");
+
+    // If no categories, fallback to generic
+    const qs = keys ? `{?${keys}*}` : "";
+    const baseAbs = base ? `${base}/best-fitness-studio-software` : "/best-fitness-studio-software";
+    return `${baseAbs}${qs}`;
+  })();
+
+  const filterActionLD = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: h1,
+    url: canonicalHref,
+    potentialAction: {
+      "@type": "Action",
+      name: "Filter vendors (query params accepted; redirects to canonical path)",
+      target: {
+        "@type": "EntryPoint",
+        urlTemplate: queryTemplate,
+        httpMethod: "GET",
+        encodingType: "application/x-www-form-urlencoded",
+      },
+    },
+  };
 
   return (
     <main className="bg-white text-black min-h-screen">
       {/* Canonical */}
       <link rel="canonical" href={canonicalHref} />
 
+      {/* Machine-readable filter spec (HTML comment for bots) */}
+      <div
+        aria-hidden="true"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: filterSpecComment }}
+      />
+
+      {/* Non-executing JSON filter spec for parsers */}
+      <script
+        type="application/json"
+        id="filter-spec"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(filterSpec) }}
+      />
+
       {/* JSON-LD base */}
       <script
         type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "WebPage",
             name: h1,
             description,
-            url: canonicalPath,
+            url: canonicalHref, // absolute
           }),
         }}
       />
       {/* JSON-LD: Breadcrumbs */}
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }} />
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
+      />
       {/* JSON-LD: FAQ */}
       <script
         type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
@@ -404,6 +374,7 @@ export default async function Page({ params }: PageProps) {
       {/* JSON-LD: ItemList (top vendors) */}
       <script
         type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
@@ -412,6 +383,12 @@ export default async function Page({ params }: PageProps) {
           }),
         }}
       />
+      {/* JSON-LD: potentialAction with EntryPoint urlTemplate (query params) */}
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(filterActionLD) }}
+      />
 
       <section className="mx-auto max-w-6xl px-4 py-10">
         <header className="mb-8">
@@ -419,14 +396,26 @@ export default async function Page({ params }: PageProps) {
           <p className="mt-2 text-sm opacity-80">{description}</p>
         </header>
 
-        {/* ========= SEO Overview & Buying Guidance (SEO-first) ========= */}
+        {/* ========= SEO Overview (no on-page filter instructions) ========= */}
         <section className="mb-8 border border-black/10 rounded-lg p-5 bg-white">
           <h2 className="text-xl font-semibold">Which fitness studio software is best for you?</h2>
           <p className="mt-2 text-sm leading-7">
             This page helps owners and operators compare modern fitness studio platforms side-by-side.
-            Start with your must-haves—booking flow, payments, memberships—then narrow to vendors that
-            satisfy <em>all</em> requirements. Every selection you add redirects to a dedicated, indexable URL.
+            Prioritize must-haves—booking flow, payments, memberships—and then evaluate depth in scheduling,
+            POS, marketing, and reporting.
           </p>
+
+          {/* Added SEO-friendly evaluation checklist */}
+          <h3 className="text-base font-semibold mt-4">How to evaluate vendors</h3>
+          <ul className="mt-2 list-disc pl-6 text-sm space-y-1">
+            <li>Check <strong>payments coverage</strong> (gateways and payment methods for your region).</li>
+            <li>Confirm <strong>class models</strong> (drop-in, courses, privates) and <strong>capacity rules</strong>.</li>
+            <li>Look for <strong>client experience</strong> (apps, reminders, wallets, checkout UX).</li>
+            <li>Verify <strong>membership/passes logic</strong> (limits, freezes, carryover, billing).</li>
+            <li>Map your <strong>POS &amp; hardware</strong> (tap-to-pay, readers, printers) if you sell in person.</li>
+            <li>Assess <strong>marketing &amp; CRM</strong> (email/SMS, automation, recovery, tracking pixels).</li>
+            <li>Calculate <strong>total cost</strong> (software + payment fees + add-ons).</li>
+          </ul>
 
           {overviewBullets.length > 0 && (
             <>
@@ -438,69 +427,6 @@ export default async function Page({ params }: PageProps) {
               </ul>
             </>
           )}
-
-          <h3 className="text-base font-semibold mt-4">How to evaluate vendors</h3>
-          <ul className="mt-2 list-disc pl-6 text-sm space-y-1">
-            <li>Check <strong>payments coverage</strong> (gateways and payment methods for your region).</li>
-            <li>Confirm <strong>class models</strong> (drop-in, courses, privates) and <strong>capacity rules</strong>.</li>
-            <li>Look for <strong>client experience</strong> (apps, reminders, wallets, checkout UX).</li>
-            <li>Verify <strong>membership/passes logic</strong> (limits, freezes, carryover, billing).</li>
-            <li>Map your <strong>POS &amp; hardware</strong> (tap-to-pay, readers, printers) if you sell in person.</li>
-            <li>Assess <strong>marketing &amp; CRM</strong> (email/SMS, automation, recovery, tracking pixels).</li>
-            <li>Calculate <strong>total cost</strong> (software + payment fees + add-ons).</li>
-          </ul>
-        </section>
-
-        {/* =================== NEW: Checkbox Form (SSR submit -> redirect to path) =================== */}
-        <section className="mb-8 border border-black/10 rounded-lg p-5 bg-white">
-          <h2 className="text-xl font-semibold mb-2">Filter by capabilities</h2>
-          <form action={applyFilters}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {CATEGORIES.map((cat) => {
-                const selected = new Set(selections.byCat[cat.key]?.and ?? []);
-                return (
-                  <fieldset key={cat.key} className="border border-black/10 rounded-md p-3">
-                    <legend className="font-medium">{cat.label}</legend>
-                    <p className="text-xs opacity-75 mt-1">
-                      {CATEGORY_DEFINITIONS[cat.key] ?? "Select all that apply."}
-                    </p>
-                    <ul className="mt-2 space-y-2">
-                      {cat.options.map((opt) => (
-                        <li key={opt.slug} className="flex items-start gap-2">
-                          <input
-                            id={`${cat.key}__${opt.slug}`}
-                            type="checkbox"
-                            name={cat.key}
-                            value={opt.slug}
-                            defaultChecked={selected.has(opt.slug)}
-                            className="mt-1"
-                          />
-                          <label htmlFor={`${cat.key}__${opt.slug}`} className="text-sm">
-                            <code>{opt.slug}</code> — {opt.label.replace(/&nbsp;/g, " ")}
-                          </label>
-                        </li>
-                      ))}
-                    </ul>
-                  </fieldset>
-                );
-              })}
-            </div>
-
-            <div className="mt-4 flex items-center gap-3">
-              <button
-                type="submit"
-                className="px-3 py-2 rounded-md border border-black/10 bg-black text-white text-sm"
-              >
-                Update results
-              </button>
-              <a
-                href="/best-fitness-studio-software"
-                className="text-sm underline underline-offset-4"
-              >
-                Clear all
-              </a>
-            </div>
-          </form>
         </section>
 
         {/* ======== SEO-Friendly Vendor Summaries (textual, crawlable) ======== */}
@@ -511,7 +437,7 @@ export default async function Page({ params }: PageProps) {
             lists the relevant categories and verified notes so you can validate requirements quickly.
           </p>
 
-          {filtered.length === 0 ? (
+        {filtered.length === 0 ? (
             <p className="mt-3 text-sm">No vendors match these filters. Remove one or more constraints and try again.</p>
           ) : (
             <div className="mt-4 space-y-6">
@@ -592,24 +518,10 @@ export default async function Page({ params }: PageProps) {
           </div>
         </section>
 
-        {/* ======== FAQ (visible content to match JSON-LD) ======== */}
+        {/* ======== FAQ (no “how to use filters” visible) ======== */}
         <section className="mt-10 border border-black/10 rounded-lg p-5">
           <h2 className="text-xl font-semibold">FAQs</h2>
           <div className="mt-3 space-y-4 text-sm">
-            <div>
-              <h3 className="font-medium">How do I filter this page?</h3>
-              <p>
-                Use the checkboxes above and click <em>Update results</em>. Each combination has its own URL (no query strings),
-                so it’s easy to share, index, and compare.
-              </p>
-            </div>
-            <div>
-              <h3 className="font-medium">What does selecting an option do?</h3>
-              <p>
-                Selecting an option (e.g., <code>payment-methods = Apple&nbsp;Pay</code>) filters to vendors that support it.
-                All selections are combined with AND logic, across and within categories.
-              </p>
-            </div>
             <div>
               <h3 className="font-medium">What if I see no results?</h3>
               <p>Relax a constraint or remove one filter at a time to broaden the results.</p>
@@ -619,38 +531,6 @@ export default async function Page({ params }: PageProps) {
               <p>To keep the page scannable, only the columns for categories you filtered remain visible.</p>
             </div>
           </div>
-        </section>
-
-        {/* =================== NEW: Crawl Hints (explicit links to expansion pages) =================== */}
-        <section className="mt-10 border border-black/10 rounded-lg p-5">
-          <h2 className="text-xl font-semibold">Explore related filtered pages</h2>
-          <p className="mt-2 text-sm">
-            From this page, you can jump to any closely-related combination. Each link below adds exactly one additional
-            requirement to your current selection (AND logic). This helps you compare “what if we also required …”.
-          </p>
-
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {expansionGroups.map((g) => (
-              <div key={g.catKey} className="border border-black/10 rounded-md p-3">
-                <h3 className="font-medium">{g.catLabel}</h3>
-                {g.links.length === 0 ? (
-                  <p className="text-sm opacity-75 mt-1">All options in this category are already selected.</p>
-                ) : (
-                  <ul className="list-disc pl-5 text-sm mt-2 space-y-1">
-                    {g.links.map((l) => (
-                      <li key={l.href}>
-                        <a href={l.href} className="underline underline-offset-4">{l.text}</a>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <p className="mt-4 text-xs opacity-70">
-            Tip: Search engines and scrapers can navigate the entire comparison space via these links with no client-side code.
-          </p>
         </section>
       </section>
     </main>
