@@ -5,7 +5,6 @@ import { CATEGORIES } from "@/lib/categories";
 import { ROWS, Row } from "@/lib/data";
 import {
   parseSelectionsFromPath,
-  parseSelectionsFromSearchParams,    // <— re-enable param parsing
   canonicalSegmentsFromSelections,
   titleFromSelections,
   descriptionFromSelections,
@@ -18,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ filters?: string[] }>;
-  searchParams: Promise<ReadonlyURLSearchParams | Record<string, string | string[] | undefined>>;
+  searchParams: Promise<ReadonlyURLSearchParams | Record<string, string | string[] | undefined>>; // kept for compatibility; unused
 };
 
 // Server-side logger
@@ -156,7 +155,7 @@ function AdditionalInfoCell({ text }: { text?: string }) {
   );
 }
 
-/* ========================== SEO helper ========================== */
+/* ========================== SEO helpers ========================== */
 const optionLabel = (catKey: string, slug: string) => {
   const cat = CATEGORIES.find((c) => c.key === catKey);
   const opt = cat?.options.find((o) => o.slug === slug);
@@ -174,41 +173,45 @@ const activeFilterSentences = (sel: Selections) => {
   return parts;
 };
 
-/* ========================== Machine-readable Filter Spec ========================== */
-function buildFilterSpecJSON(basePath: string) {
-  return {
-    version: 1,
-    basePath,
-    pathPattern: "{basePath}/{catKey}-{slug}[/...]; within-category joiner: '-and-'; category order = CATEGORIES order",
-    joiners: { withinCategory: "-and-", betweenCategories: "/" },
-    categories: CATEGORIES.map((c) => ({
-      key: c.key,
-      label: c.label,
-      options: c.options.map((o) => o.slug),
-    })),
-    acceptedQueryParams: CATEGORIES.map((c) => c.key),
-    behavior: "GET query params are accepted and will be 301/302 redirected to canonical path-only URL.",
-  };
+/* ========================== Link builders (ADD/REMOVE) ========================== */
+function cloneSelections(s: Selections): Selections {
+  const out: Selections = { byCat: {} };
+  for (const [k, b] of Object.entries(s.byCat)) {
+    out.byCat[k] = { and: b.and ? [...b.and] : undefined };
+  }
+  return out;
+}
+
+function pathWithAdded(sel: Selections, catKey: string, slug: string): string {
+  const next = cloneSelections(sel);
+  const bucket = next.byCat[catKey] ?? { and: [] };
+  bucket.and = Array.from(new Set([...(bucket.and ?? []), slug]));
+  next.byCat[catKey] = bucket;
+  const segs = canonicalSegmentsFromSelections(next);
+  return buildCanonicalPath(segs);
+}
+
+function pathWithRemoved(sel: Selections, catKey: string, slug: string): string {
+  const next = cloneSelections(sel);
+  const bucket = next.byCat[catKey];
+  if (!bucket || !bucket.and) return buildCanonicalPath(canonicalSegmentsFromSelections(next));
+  bucket.and = bucket.and.filter((s) => s !== slug);
+  if (bucket.and.length === 0) delete next.byCat[catKey];
+  const segs = canonicalSegmentsFromSelections(next);
+  return buildCanonicalPath(segs);
+}
+
+function hasAnyFilters(sel: Selections): boolean {
+  return Object.values(sel.byCat).some((b) => (b.and?.length ?? 0) > 0);
 }
 
 export default async function Page({ params, searchParams }: PageProps) {
   const resolvedParams = await params;
-  const resolvedSearchParams = await searchParams;
+  await searchParams; // intentionally unused; maintain signature
 
   slog("incoming params.filters", resolvedParams.filters ?? []);
-  slog("incoming searchParams", resolvedSearchParams);
 
-  // 1) Accept SGCarmart-style query params and canonicalize to path
-  const fromQuery = parseSelectionsFromSearchParams(resolvedSearchParams);
-  const segsFromQuery = canonicalSegmentsFromSelections(fromQuery);
-  if (segsFromQuery.length > 0) {
-    const target = buildCanonicalPath(segsFromQuery);
-    slog("redirecting (query -> path canonical)", target);
-    // Use permanent redirect for stronger consolidation
-    permanentRedirect(target);
-  }
-
-  // 2) Parse from path only
+  // Parse from path only (path = truth)
   const selections = parseSelectionsFromPath(resolvedParams.filters);
   const canonicalSegs = canonicalSegmentsFromSelections(selections);
   const canonicalPath = buildCanonicalPath(canonicalSegs);
@@ -219,19 +222,18 @@ export default async function Page({ params, searchParams }: PageProps) {
 
   if (incomingPath !== canonicalPath) {
     slog("redirecting (path canonicalize)", canonicalPath);
-    // Use permanent redirect for non-canonical path variants
     permanentRedirect(canonicalPath);
   }
 
-  // 3) SEO text
+  // SEO text
   const h1 = titleFromSelections(selections);
   const description = descriptionFromSelections(selections);
 
-  // 4) Filter rows (AND within & across categories)
+  // Filter rows (AND within & across categories)
   const filtered = ROWS.filter((row) => matchesSelections(row, selections));
   slog("filtered.count", filtered.length);
 
-  // 5) Visible columns: only the selected categories; if none selected -> show all
+  // Visible columns: only the selected categories; if none selected -> show all
   const activeCatKeys = CATEGORIES.map((c) => c.key).filter((k) => {
     const b = selections.byCat[k];
     return b && (b.and?.length ?? 0) > 0;
@@ -286,63 +288,14 @@ export default async function Page({ params, searchParams }: PageProps) {
   const base = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "");
   const canonicalHref = base ? `${base}${canonicalPath}` : canonicalPath;
 
-  /* Build machine-readable filter spec JSON and HTML comment payload */
-  const filterSpec = buildFilterSpecJSON("/best-fitness-studio-software");
-  const filterSpecComment =
-    `<!-- FILTER_SPEC: ${JSON.stringify(filterSpec)} -->`;
-
-  /* Build schema.org potentialAction with EntryPoint urlTemplate for query params */
-  const queryTemplate = (() => {
-    // Build "{?cat1*,cat2*,...}" RFC6570-style list template using category keys
-    const keys = CATEGORIES.map((c) => c.key).join("*,");
-
-    // If no categories, fallback to generic
-    const qs = keys ? `{?${keys}*}` : "";
-    const baseAbs = base ? `${base}/best-fitness-studio-software` : "/best-fitness-studio-software";
-    return `${baseAbs}${qs}`;
-  })();
-
-  const filterActionLD = {
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    name: h1,
-    url: canonicalHref,
-    potentialAction: {
-      "@type": "Action",
-      name: "Filter vendors (query params accepted; redirects to canonical path)",
-      target: {
-        "@type": "EntryPoint",
-        urlTemplate: queryTemplate,
-        httpMethod: "GET",
-        encodingType: "application/x-www-form-urlencoded",
-      },
-    },
-  };
-
   return (
     <main className="bg-white text-black min-h-screen">
       {/* Canonical */}
       <link rel="canonical" href={canonicalHref} />
 
-      {/* Machine-readable filter spec (HTML comment for bots) */}
-      <div
-        aria-hidden="true"
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: filterSpecComment }}
-      />
-
-      {/* Non-executing JSON filter spec for parsers */}
-      <script
-        type="application/json"
-        id="filter-spec"
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(filterSpec) }}
-      />
-
       {/* JSON-LD base */}
       <script
         type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
@@ -354,15 +307,10 @@ export default async function Page({ params, searchParams }: PageProps) {
         }}
       />
       {/* JSON-LD: Breadcrumbs */}
-      <script
-        type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }}
-      />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLD) }} />
       {/* JSON-LD: FAQ */}
       <script
         type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
@@ -374,7 +322,6 @@ export default async function Page({ params, searchParams }: PageProps) {
       {/* JSON-LD: ItemList (top vendors) */}
       <script
         type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
@@ -382,12 +329,6 @@ export default async function Page({ params, searchParams }: PageProps) {
             itemListElement: itemListLD,
           }),
         }}
-      />
-      {/* JSON-LD: potentialAction with EntryPoint urlTemplate (query params) */}
-      <script
-        type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(filterActionLD) }}
       />
 
       <section className="mx-auto max-w-6xl px-4 py-10">
@@ -405,7 +346,7 @@ export default async function Page({ params, searchParams }: PageProps) {
             POS, marketing, and reporting.
           </p>
 
-          {/* Added SEO-friendly evaluation checklist */}
+          {/* SEO-friendly evaluation checklist */}
           <h3 className="text-base font-semibold mt-4">How to evaluate vendors</h3>
           <ul className="mt-2 list-disc pl-6 text-sm space-y-1">
             <li>Check <strong>payments coverage</strong> (gateways and payment methods for your region).</li>
@@ -437,7 +378,7 @@ export default async function Page({ params, searchParams }: PageProps) {
             lists the relevant categories and verified notes so you can validate requirements quickly.
           </p>
 
-        {filtered.length === 0 ? (
+          {filtered.length === 0 ? (
             <p className="mt-3 text-sm">No vendors match these filters. Remove one or more constraints and try again.</p>
           ) : (
             <div className="mt-4 space-y-6">
@@ -485,6 +426,66 @@ export default async function Page({ params, searchParams }: PageProps) {
               ))}
             </div>
           )}
+        </section>
+
+        {/* ======== Explore related filtered pages (HTML-discoverable links) ======== */}
+        <section className="mt-10 border border-black/10 rounded-lg p-5 bg-white">
+          <h2 className="text-xl font-semibold">Explore related filtered pages</h2>
+
+          {/* Remove any of the current filters (bidirectional navigation) */}
+          {hasAnyFilters(selections) && (
+            <div className="mt-3">
+              <h3 className="text-base font-semibold">Remove a filter to broaden results</h3>
+              <ul className="mt-2 list-disc pl-6 text-sm space-y-1">
+                {Object.entries(selections.byCat).map(([catKey, bucket]) =>
+                  (bucket.and ?? []).map((slug) => (
+                    <li key={`rm-${catKey}-${slug}`}>
+                      <a
+                        href={pathWithRemoved(selections, catKey, slug)}
+                        className="underline underline-offset-4"
+                      >
+                        Remove “{optionLabel(catKey, slug)}” ({CATEGORIES.find(c => c.key === catKey)?.label})
+                      </a>
+                    </li>
+                  ))
+                )}
+                <li key="clear-all">
+                  <a href="/best-fitness-studio-software" className="underline underline-offset-4">
+                    Clear all filters (see all vendors)
+                  </a>
+                </li>
+              </ul>
+            </div>
+          )}
+
+          {/* Add any additional filter (list all options not currently selected) */}
+          <div className="mt-6">
+            <h3 className="text-base font-semibold">Add a filter to refine further</h3>
+            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {CATEGORIES.map((cat) => {
+                const selected = new Set(selections.byCat[cat.key]?.and ?? []);
+                const candidates = cat.options.map((o) => o.slug).filter((s) => !selected.has(s));
+                if (candidates.length === 0) return null;
+                return (
+                  <div key={`add-${cat.key}`} className="border border-black/10 rounded-md p-3">
+                    <div className="font-medium">{cat.label}</div>
+                    <ul className="list-disc pl-5 text-sm mt-2 space-y-1">
+                      {candidates.map((slug) => (
+                        <li key={`add-${cat.key}-${slug}`}>
+                          <a
+                            href={pathWithAdded(selections, cat.key, slug)}
+                            className="underline underline-offset-4"
+                          >
+                            Add “{optionLabel(cat.key, slug)}”
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </section>
 
         {/* ======== Buying guide + methodology (SEO content) ======== */}
