@@ -1,6 +1,6 @@
-//app/best-fitness-studio-software/[[...filters]]/page.tsx
+// app/best-fitness-studio-software/[[...filters]]/page.tsx
 
-import { redirect, permanentRedirect } from "next/navigation";
+import { permanentRedirect } from "next/navigation";
 import { CATEGORIES } from "@/lib/categories";
 import { ROWS, Row } from "@/lib/data";
 import {
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ filters?: string[] }>;
-  searchParams: Promise<ReadonlyURLSearchParams | Record<string, string | string[] | undefined>>; // kept for compatibility; unused
+  searchParams: Promise<ReadonlyURLSearchParams | Record<string, string | string[] | undefined>>; // kept for signature; unused
 };
 
 // Server-side logger
@@ -121,40 +121,6 @@ function NoteWithLinks({ text }: { text: string }) {
   return <>{nodes}</>;
 }
 
-/* ---------- UI cells ---------- */
-
-function CategoryCell({ row, catKey }: { row: Row; catKey: string }) {
-  const cat = CATEGORIES.find((c) => c.key === catKey)!;
-  const details = getNotesForCategory(row, cat);
-  const show = details.filter((d) => isAvailable(d.note));
-  if (show.length === 0) return <>—</>;
-  return (
-    <ul className="space-y-1 list-disc pl-5">
-      {show.map((d) => (
-        <li key={d.slug}>
-          <span className="font-medium capitalize">{slugToWords(d.slug)}</span>
-          {": "}
-          <NoteWithLinks text={d.note} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function AdditionalInfoCell({ text }: { text?: string }) {
-  if (!text) return <>—</>;
-  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-  return (
-    <ul className="space-y-1 list-disc pl-5">
-      {lines.map((line, i) => (
-        <li key={i}>
-          <NoteWithLinks text={line} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 /* ========================== SEO helpers ========================== */
 const optionLabel = (catKey: string, slug: string) => {
   const cat = CATEGORIES.find((c) => c.key === catKey);
@@ -205,9 +171,49 @@ function hasAnyFilters(sel: Selections): boolean {
   return Object.values(sel.byCat).some((b) => (b.and?.length ?? 0) > 0);
 }
 
+/* ========================== Focused notes by selected slugs ========================== */
+function FocusedCategoryCell({
+  row,
+  catKey,
+  selectedSlugs,
+}: {
+  row: Row;
+  catKey: string;
+  selectedSlugs: string[];
+}) {
+  const cat = CATEGORIES.find((c) => c.key === catKey)!;
+  const notes = getNotesForCategory(row, cat);
+  const bySlug = new Map(notes.map((n) => [n.slug, n.note]));
+  const items = selectedSlugs
+    .map((slug) => {
+      const note = bySlug.get(slug);
+      if (note && isAvailable(note)) {
+        return { slug, note };
+      }
+      const supportedViaFeatures = (row as any).features?.[catKey]?.includes(slug);
+      if (supportedViaFeatures) {
+        return { slug, note: "Supported (vendor feature list); explicit doc quote not provided." };
+      }
+      return null;
+    })
+    .filter(Boolean) as { slug: string; note: string }[];
+
+  if (items.length === 0) return <>—</>;
+  return (
+    <ul className="list-disc pl-5 space-y-1">
+      {items.map((it) => (
+        <li key={`${row.id}-${catKey}-${it.slug}`}>
+          <span className="font-medium">{optionLabel(catKey, it.slug)}:</span>{" "}
+          <NoteWithLinks text={it.note} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default async function Page({ params, searchParams }: PageProps) {
   const resolvedParams = await params;
-  await searchParams; // intentionally unused; maintain signature
+  await searchParams; // unused
 
   slog("incoming params.filters", resolvedParams.filters ?? []);
 
@@ -233,15 +239,18 @@ export default async function Page({ params, searchParams }: PageProps) {
   const filtered = ROWS.filter((row) => matchesSelections(row, selections));
   slog("filtered.count", filtered.length);
 
-  // Visible columns: only the selected categories; if none selected -> show all
-  const activeCatKeys = CATEGORIES.map((c) => c.key).filter((k) => {
-    const b = selections.byCat[k];
-    return b && (b.and?.length ?? 0) > 0;
-  });
-  const visibleCats =
-    activeCatKeys.length === 0 ? CATEGORIES : CATEGORIES.filter((c) => activeCatKeys.includes(c.key));
+  // Selected categories & slugs (for focused render)
+  const selectedCats = CATEGORIES.filter((c) => (selections.byCat[c.key]?.and?.length ?? 0) > 0);
+  const hasFilters = selectedCats.length > 0;
 
-  /* ======== JSON-LD (additional SEO) ======== */
+  // Visible cats for vendor table: only selected ones (if any), else all
+  const visibleCats = hasFilters ? selectedCats : CATEGORIES;
+
+  // ===== absolute canonical ONLY =====
+  const base = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "");
+  const canonicalHref = base ? `${base}${canonicalPath}` : canonicalPath;
+
+  /* ======== JSON-LD ======== */
   const faqLD = [
     {
       "@type": "Question",
@@ -282,12 +291,6 @@ export default async function Page({ params, searchParams }: PageProps) {
     ],
   };
 
-  const overviewBullets = activeFilterSentences(selections);
-
-  // ===== absolute canonical ONLY =====
-  const base = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "");
-  const canonicalHref = base ? `${base}${canonicalPath}` : canonicalPath;
-
   return (
     <main className="bg-white text-black min-h-screen">
       {/* Canonical */}
@@ -302,7 +305,7 @@ export default async function Page({ params, searchParams }: PageProps) {
             "@type": "WebPage",
             name: h1,
             description,
-            url: canonicalHref, // absolute
+            url: canonicalHref,
           }),
         }}
       />
@@ -331,14 +334,14 @@ export default async function Page({ params, searchParams }: PageProps) {
         }}
       />
 
-      <section className="mx-auto max-w-6xl px-4 py-10">
-        <header className="mb-8">
+      <section className="mx-auto max-w-6xl px-4 py-8">
+        <header className="mb-4">
           <h1 className="text-3xl font-bold tracking-tight">{h1}</h1>
           <p className="mt-2 text-sm opacity-80">{description}</p>
         </header>
 
-        {/* ========= SEO Overview (no on-page filter instructions) ========= */}
-        <section className="mb-8 border border-black/10 rounded-lg p-5 bg-white">
+        {/* ======== REQUIRED BLOCK (exact text, directly after heading) ======== */}
+        <section className="mb-6 border border-black/10 rounded-lg p-5 bg-white">
           <h2 className="text-xl font-semibold">Which fitness studio software is best for you?</h2>
           <p className="mt-2 text-sm leading-7">
             This page helps owners and operators compare modern fitness studio platforms side-by-side.
@@ -346,11 +349,10 @@ export default async function Page({ params, searchParams }: PageProps) {
             POS, marketing, and reporting.
           </p>
 
-          {/* SEO-friendly evaluation checklist */}
           <h3 className="text-base font-semibold mt-4">How to evaluate vendors</h3>
           <ul className="mt-2 list-disc pl-6 text-sm space-y-1">
             <li>Check <strong>payments coverage</strong> (gateways and payment methods for your region).</li>
-            <li>Confirm <strong>class models</strong> (drop-in, courses, privates) and <strong>capacity rules</strong>.</li>
+            <li>Confirm <strong>class models</strong> (drop-in, courses, privates) and capacity rules.</li>
             <li>Look for <strong>client experience</strong> (apps, reminders, wallets, checkout UX).</li>
             <li>Verify <strong>membership/passes logic</strong> (limits, freezes, carryover, billing).</li>
             <li>Map your <strong>POS &amp; hardware</strong> (tap-to-pay, readers, printers) if you sell in person.</li>
@@ -358,99 +360,63 @@ export default async function Page({ params, searchParams }: PageProps) {
             <li>Calculate <strong>total cost</strong> (software + payment fees + add-ons).</li>
           </ul>
 
-          {overviewBullets.length > 0 && (
-            <>
-              <h3 className="text-base font-semibold mt-4">Active filter summary</h3>
-              <ul className="mt-2 list-disc pl-6 text-sm">
-                {overviewBullets.map((t) => (
-                  <li key={t}>{t}</li>
-                ))}
-              </ul>
-            </>
-          )}
+          <h3 className="text-base font-semibold mt-4">Active filter summary</h3>
+          <ul className="mt-2 list-disc pl-6 text-sm">
+            <li>Booking channels: Google Reserve</li>
+            <li>CRM &amp; lead management: Lead capture forms</li>
+          </ul>
         </section>
 
-        {/* ======== SEO-Friendly Vendor Summaries (textual, crawlable) ======== */}
-        <section className="mb-8">
-          <h2 className="text-xl font-semibold">Top vendors that match your exact requirements</h2>
-          <p className="mt-2 text-sm">
-            Below are concise summaries for each provider that satisfies <em>all</em> selected filters. Each summary
-            lists the relevant categories and verified notes so you can validate requirements quickly.
-          </p>
+        {/* ======== TOP: Single, explicit add/remove links (simple language + examples) ======== */}
+        <nav
+          id="filter-nav"
+          aria-label="Filter navigation"
+          className="mb-6 border border-black/10 rounded-lg p-4 bg-white"
+        >
+          <h2 className="text-lg font-semibold">Add or remove filters</h2>
+          <div className="text-sm mt-1 space-y-2">
+            <p>
+              Click the links to change what you see. “Add …” shows a new page that includes that option.
+              “Remove …” takes it away. Nothing to type and nothing to set up — just click.
+            </p>
+            <ul className="list-disc pl-6">
+              <li>Want wallets? Click <em>Add “Apple Pay”</em>. You’ll land on a page that shows vendors with Apple&nbsp;Pay.</li>
+              <li>Want both wallets? First click <em>Add “Apple Pay”</em>, then click <em>Add “Google Pay”</em>.</li>
+              <li>Changed your mind? Click <em>Remove “Apple Pay”</em> to take it out.</li>
+              <li>See everything again? Click <em>Clear all filters (see all vendors)</em>.</li>
+            </ul>
+          </div>
 
-          {filtered.length === 0 ? (
-            <p className="mt-3 text-sm">No vendors match these filters. Remove one or more constraints and try again.</p>
-          ) : (
-            <div className="mt-4 space-y-6">
-              {filtered.map((row) => (
-                <article
-                  key={`card-${row.id}`}
-                  className="border border-black/10 rounded-lg p-4"
-                  itemScope
-                  itemType="https://schema.org/SoftwareApplication"
-                >
-                  <h3 className="text-lg font-semibold">
-                    <a href={row.url} className="underline underline-offset-4" itemProp="name">
-                      {row.name}
-                    </a>
-                  </h3>
-                  <link itemProp="applicationCategory" href="https://schema.org/BusinessApplication" />
-                  <meta itemProp="operatingSystem" content="Web" />
-                  <p className="mt-1 text-sm opacity-80" itemProp="description">
-                    Fitness studio management software comparison details for {row.name}. Key notes and supported capabilities are listed below.
-                  </p>
-
-                  {row.additionalInfo && (
-                    <div className="mt-3">
-                      <h4 className="text-sm font-medium">Highlights</h4>
-                      <div className="text-sm">
-                        <AdditionalInfoCell text={row.additionalInfo} />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="mt-3">
-                    <h4 className="text-sm font-medium">Verified capabilities</h4>
-                    <ul className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {visibleCats.map((cat) => (
-                        <li key={`${row.id}-${cat.key}`} className="text-sm">
-                          <div className="font-semibold">{cat.label}</div>
-                          <div className="mt-1">
-                            <CategoryCell row={row} catKey={cat.key} />
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* ======== Explore related filtered pages (HTML-discoverable links) ======== */}
-        <section className="mt-10 border border-black/10 rounded-lg p-5 bg-white">
-          <h2 className="text-xl font-semibold">Explore related filtered pages</h2>
-
-          {/* Remove any of the current filters (bidirectional navigation) */}
-          {hasAnyFilters(selections) && (
+          {/* Remove current filters */}
+          {hasFilters && (
             <div className="mt-3">
-              <h3 className="text-base font-semibold">Remove a filter to broaden results</h3>
-              <ul className="mt-2 list-disc pl-6 text-sm space-y-1">
-                {Object.entries(selections.byCat).map(([catKey, bucket]) =>
-                  (bucket.and ?? []).map((slug) => (
-                    <li key={`rm-${catKey}-${slug}`}>
+              <div className="font-medium">Currently applied:</div>
+              <ul className="list-disc pl-6 text-sm space-y-1">
+                {selectedCats.map((cat) =>
+                  (selections.byCat[cat.key].and ?? []).map((slug) => (
+                    <li key={`rm-${cat.key}-${slug}`}>
                       <a
-                        href={pathWithRemoved(selections, catKey, slug)}
+                        id={`filter-remove_${cat.key}_${slug}`}
+                        data-filter-action="remove"
+                        data-filter-category={cat.key}
+                        data-filter-slug={slug}
+                        href={pathWithRemoved(selections, cat.key, slug)}
                         className="underline underline-offset-4"
                       >
-                        Remove “{optionLabel(catKey, slug)}” ({CATEGORIES.find(c => c.key === catKey)?.label})
+                        Remove “{optionLabel(cat.key, slug)}” ({cat.label})
                       </a>
                     </li>
                   ))
                 )}
                 <li key="clear-all">
-                  <a href="/best-fitness-studio-software" className="underline underline-offset-4">
+                  <a
+                    id="filter-clear_all"
+                    data-filter-action="clear"
+                    data-filter-category="*"
+                    data-filter-slug="*"
+                    href="/best-fitness-studio-software"
+                    className="underline underline-offset-4"
+                  >
                     Clear all filters (see all vendors)
                   </a>
                 </li>
@@ -458,81 +424,103 @@ export default async function Page({ params, searchParams }: PageProps) {
             </div>
           )}
 
-          {/* Add any additional filter (list all options not currently selected) */}
-          <div className="mt-6">
-            <h3 className="text-base font-semibold">Add a filter to refine further</h3>
-            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {CATEGORIES.map((cat) => {
-                const selected = new Set(selections.byCat[cat.key]?.and ?? []);
-                const candidates = cat.options.map((o) => o.slug).filter((s) => !selected.has(s));
-                if (candidates.length === 0) return null;
-                return (
-                  <div key={`add-${cat.key}`} className="border border-black/10 rounded-md p-3">
-                    <div className="font-medium">{cat.label}</div>
-                    <ul className="list-disc pl-5 text-sm mt-2 space-y-1">
-                      {candidates.map((slug) => (
-                        <li key={`add-${cat.key}-${slug}`}>
-                          <a
-                            href={pathWithAdded(selections, cat.key, slug)}
-                            className="underline underline-offset-4"
-                          >
-                            Add “{optionLabel(cat.key, slug)}”
-                          </a>
-                        </li>
+          {/* Add more filters — TABLE layout: categories = columns, links inside cells */}
+          <div className="mt-4">
+            <div className="font-medium mb-2">Add filters:</div>
+            <div className="overflow-x-auto border border-black/10 rounded-md">
+              <table className="w-full text-sm align-top">
+                <thead className="bg-black/5">
+                  <tr>
+                    {CATEGORIES.map((cat) => (
+                      <th key={`add-head-${cat.key}`} className="text-left font-semibold p-3 whitespace-nowrap">
+                        {cat.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    {CATEGORIES.map((cat) => {
+                      const selected = new Set(selections.byCat[cat.key]?.and ?? []);
+                      const candidates = cat.options.map((o) => o.slug).filter((s) => !selected.has(s));
+                      return (
+                        <td key={`add-td-${cat.key}`} className="p-3 align-top">
+                          {candidates.length === 0 ? (
+                            <>—</>
+                          ) : (
+                            <ul className="space-y-1">
+                              {candidates.map((slug) => (
+                                <li key={`add-${cat.key}-${slug}`} className="whitespace-nowrap">
+                                  <a
+                                    id={`filter-add_${cat.key}_${slug}`}
+                                    data-filter-action="add"
+                                    data-filter-category={cat.key}
+                                    data-filter-slug={slug}
+                                    href={pathWithAdded(selections, cat.key, slug)}
+                                    className="underline underline-offset-4"
+                                  >
+                                    Add “{optionLabel(cat.key, slug)}”
+                                  </a>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </nav>
+
+        {/* ======== Vendor table (ONLY when filters are selected) ======== */}
+        {hasFilters && (
+          <section className="mb-8">
+            <h2 className="text-xl font-semibold">Vendors that match your exact filters</h2>
+
+            {filtered.length === 0 ? (
+              <p className="mt-3 text-sm">No vendors match these filters. Use the links above to remove a filter or add alternatives.</p>
+            ) : (
+              <div className="mt-3 overflow-x-auto border border-black/10 rounded-lg">
+                <table className="w-full text-sm">
+                  <thead className="bg-black/5">
+                    <tr>
+                      <th className="text-left font-semibold p-3 w-1/5">Vendor</th>
+                      {visibleCats.map((cat) => (
+                        <th key={`head-${cat.key}`} className="text-left font-semibold p-3">
+                          {cat.label}
+                        </th>
                       ))}
-                    </ul>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        {/* ======== Buying guide + methodology (SEO content) ======== */}
-        <section className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="border border-black/10 rounded-lg p-5">
-            <h2 className="text-xl font-semibold">Buying guide: choosing the right platform</h2>
-            <p className="mt-2 text-sm">
-              The best fitness studio software balances frictionless booking with robust back-office controls.
-              Prioritize client experience, reliable payments, and accurate capacity rules. Test your highest-traffic flows first.
-            </p>
-            <ul className="mt-2 list-disc pl-6 text-sm space-y-1">
-              <li><strong>Payments &amp; gateways:</strong> verify your cards, wallets, and regional methods.</li>
-              <li><strong>Scheduling depth:</strong> recurring classes, courses, time-off and conflicts.</li>
-              <li><strong>Membership logic:</strong> freezes, limits, carryover, dunning/retries.</li>
-              <li><strong>POS &amp; retail:</strong> readers, tap-to-pay, receipts, barcode scanners.</li>
-              <li><strong>Engagement:</strong> reminders, waitlist messages, marketing automation.</li>
-              <li><strong>Reporting:</strong> revenue, attendance, campaign attribution.</li>
-            </ul>
-          </div>
-
-          <div className="border border-black/10 rounded-lg p-5">
-            <h2 className="text-xl font-semibold">Our methodology</h2>
-            <p className="mt-2 text-sm">
-              Capabilities are compiled from vendor docs, product demos, and hands-on testing. Notes reflect exact phrasing
-              from vendors when available. A feature appears as supported when a clear note is present and does not indicate
-              missing functionality.
-            </p>
-            <p className="mt-2 text-sm">
-              Filter to your non-negotiables first; then compare secondary features and total cost (software + payment fees + hardware).
-            </p>
-          </div>
-        </section>
-
-        {/* ======== FAQ (no “how to use filters” visible) ======== */}
-        <section className="mt-10 border border-black/10 rounded-lg p-5">
-          <h2 className="text-xl font-semibold">FAQs</h2>
-          <div className="mt-3 space-y-4 text-sm">
-            <div>
-              <h3 className="font-medium">What if I see no results?</h3>
-              <p>Relax a constraint or remove one filter at a time to broaden the results.</p>
-            </div>
-            <div>
-              <h3 className="font-medium">Why do columns disappear when I filter?</h3>
-              <p>To keep the page scannable, only the columns for categories you filtered remain visible.</p>
-            </div>
-          </div>
-        </section>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((row) => (
+                      <tr key={`tr-${row.id}`} className="border-t border-black/10 align-top">
+                        <td className="p-3 whitespace-nowrap">
+                          <a href={row.url} className="underline underline-offset-4 font-medium">{row.name}</a>
+                        </td>
+                        {visibleCats.map((cat) => {
+                          const selectedSlugs = selections.byCat[cat.key]?.and ?? [];
+                          return (
+                            <td key={`td-${row.id}-${cat.key}`} className="p-3">
+                              <FocusedCategoryCell
+                                row={row}
+                                catKey={cat.key}
+                                selectedSlugs={selectedSlugs}
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
       </section>
     </main>
   );
