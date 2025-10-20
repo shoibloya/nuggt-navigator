@@ -1,21 +1,22 @@
+//app/best-fitness-studio-software/[[...filters]]/page.tsx
+
 import { redirect } from "next/navigation";
 import { CATEGORIES } from "@/lib/categories";
 import { ROWS, Row } from "@/lib/data";
 import {
   parseSelectionsFromPath,
-  parseSelectionsFromSearchParams,
   canonicalSegmentsFromSelections,
   titleFromSelections,
   descriptionFromSelections,
   buildCanonicalPath,
   type Selections,
 } from "@/lib/url";
+import React from "react";
 
 export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ filters?: string[] }>;
-  searchParams: Promise<ReadonlyURLSearchParams | Record<string, string | string[] | undefined>>;
 };
 
 // Server-side logger
@@ -94,7 +95,9 @@ function NoteWithLinks({ text }: { text: string }) {
     if (before) nodes.push(before);
     const parenText = m[0];
     const inner = parenText.slice(1, -1).trim();
-    if (isLikelyLink(inner)) {
+    if (inner.includes("(")) {
+      nodes.push(parenText);
+    } else if (isLikelyLink(inner)) {
       const href = inner.startsWith("http") ? inner : `https://${inner}`;
       nodes.push(
         <a
@@ -112,7 +115,7 @@ function NoteWithLinks({ text }: { text: string }) {
     }
     last = m.index + parenText.length;
   }
-  // 🔧 FIX: use parentheses, not bracket indexing
+  // use parentheses, not bracket indexing
   const after = text.slice(last);
   if (after) nodes.push(after);
   return <>{nodes}</>;
@@ -206,30 +209,68 @@ const activeFilterSentences = (sel: Selections) => {
   return parts;
 };
 
-export default async function Page({ params, searchParams }: PageProps) {
-  const resolvedParams = await params;
-  const resolvedSearchParams = await searchParams;
+/* ========================== NEW: Server Action (SSR-only filtering) ========================== */
+async function applyFilters(formData: FormData) {
+  "use server";
+  // Build selections from posted checkbox values (AND within each category)
+  const byCat: Record<string, { and: string[] }> = {};
+  for (const cat of CATEGORIES) {
+    const raw = formData.getAll(cat.key).map(String);
+    if (raw.length === 0) continue;
+    const allowed = new Set(cat.options.map((o) => o.slug));
+    const and = Array.from(new Set(raw.filter((s) => allowed.has(s))));
+    if (and.length > 0) byCat[cat.key] = { and };
+  }
+  const segs = canonicalSegmentsFromSelections({ byCat });
+  const target = buildCanonicalPath(segs);
+  redirect(target);
+}
 
-  slog("incoming params.filters", resolvedParams.filters ?? []);
-  slog("incoming searchParams", resolvedSearchParams);
+/* ========================== NEW: Expansion Links (crawl hints) ========================== */
 
-  // 1) Parse from path and query
-  const fromPath = parseSelectionsFromPath(resolvedParams.filters);
-  const fromQuery = parseSelectionsFromSearchParams(resolvedSearchParams);
-  slog("fromPath.byCat", fromPath.byCat);
-  slog("fromQuery.byCat", fromQuery.byCat);
+function buildExpansionGroups(sel: Selections): Array<{
+  catKey: string;
+  catLabel: string;
+  links: Array<{ href: string; text: string }>;
+}> {
+  const groups: Array<{ catKey: string; catLabel: string; links: Array<{ href: string; text: string }> }> = [];
+  const currentByCat = sel.byCat;
 
-  // 2) Canonicalize query -> path ONLY if we produced segments
-  const segsFromQuery = canonicalSegmentsFromSelections(fromQuery);
-  slog("segsFromQuery", segsFromQuery);
-  if (segsFromQuery.length > 0) {
-    const target = buildCanonicalPath(segsFromQuery);
-    slog("redirecting (query -> path)", target);
-    redirect(target);
+  for (const cat of CATEGORIES) {
+    const current = new Set(currentByCat[cat.key]?.and ?? []);
+    const links: Array<{ href: string; text: string }> = [];
+
+    for (const opt of cat.options) {
+      if (current.has(opt.slug)) continue; // only show additions
+      const nextSel: Selections = {
+        byCat: Object.fromEntries(
+          Object.entries(currentByCat).map(([k, v]) => [k, { and: Array.from(new Set(v.and ?? [])) }])
+        ) as Record<string, { and: string[] }>,
+      };
+      const existing = nextSel.byCat[cat.key]?.and ?? [];
+      nextSel.byCat[cat.key] = { and: Array.from(new Set([...existing, opt.slug])) };
+
+      const segs = canonicalSegmentsFromSelections(nextSel);
+      const href = buildCanonicalPath(segs);
+      links.push({ href, text: `Add ${opt.label}` });
+    }
+
+    groups.push({ catKey: cat.key, catLabel: cat.label, links });
   }
 
-  // 3) Ensure canonical path for path-based selections
-  const selections = fromPath;
+  return groups;
+}
+
+export default async function Page({ params }: PageProps) {
+  const resolvedParams = await params;
+
+  slog("incoming params.filters", resolvedParams.filters ?? []);
+
+  // 1) Parse from path only (NO query string support)
+  const selections = parseSelectionsFromPath(resolvedParams.filters);
+  slog("fromPath.byCat", selections.byCat);
+
+  // 2) Ensure canonical path for path-based selections
   const canonicalSegs = canonicalSegmentsFromSelections(selections);
   const canonicalPath = buildCanonicalPath(canonicalSegs);
   const incomingPath =
@@ -244,15 +285,15 @@ export default async function Page({ params, searchParams }: PageProps) {
     redirect(canonicalPath);
   }
 
-  // 4) SEO text
+  // 3) SEO text
   const h1 = titleFromSelections(selections);
   const description = descriptionFromSelections(selections);
 
-  // 5) Filter rows (AND within & across categories)
+  // 4) Filter rows (AND within & across categories)
   const filtered = ROWS.filter((row) => matchesSelections(row, selections));
   slog("filtered.count", filtered.length);
 
-  // 6) Visible columns: only the selected categories; if none selected -> show all
+  // 5) Visible columns: only the selected categories; if none selected -> show all
   const activeCatKeys = CATEGORIES.map((c) => c.key).filter((k) => {
     const b = selections.byCat[k];
     return b && (b.and?.length ?? 0) > 0;
@@ -269,7 +310,7 @@ export default async function Page({ params, searchParams }: PageProps) {
       acceptedAnswer: {
         "@type": "Answer",
         text:
-          "Repeat the same category parameter to require multiple options. Example: ?payment-methods=apple-pay&payment-methods=google-pay&payment-gateways=stripe filters vendors that support both Apple Pay and Google Pay and use Stripe as the payment gateway.",
+          "Use the on-page checkboxes and submit to update. Each combination redirects to a dedicated URL so you can compare options quickly.",
       },
     },
     {
@@ -278,7 +319,7 @@ export default async function Page({ params, searchParams }: PageProps) {
       acceptedAnswer: {
         "@type": "Answer",
         text:
-          "Using payment-methods=apple-pay means you are filtering to vendors that support Apple Pay (setting YES for the apple-pay option).",
+          "Selecting an option (e.g., Apple Pay under Payment methods) filters to software that supports that capability. All selections are combined with AND logic.",
       },
     },
     {
@@ -325,6 +366,9 @@ export default async function Page({ params, searchParams }: PageProps) {
   // ===== absolute canonical ONLY =====
   const base = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "");
   const canonicalHref = base ? `${base}${canonicalPath}` : canonicalPath;
+
+  /* ========================== NEW: Build expansion link groups ========================== */
+  const expansionGroups = buildExpansionGroups(selections);
 
   return (
     <main className="bg-white text-black min-h-screen">
@@ -375,13 +419,13 @@ export default async function Page({ params, searchParams }: PageProps) {
           <p className="mt-2 text-sm opacity-80">{description}</p>
         </header>
 
-        {/* ========= SEO Overview & Buying Guidance (NEW, SEO-first) ========= */}
+        {/* ========= SEO Overview & Buying Guidance (SEO-first) ========= */}
         <section className="mb-8 border border-black/10 rounded-lg p-5 bg-white">
           <h2 className="text-xl font-semibold">Which fitness studio software is best for you?</h2>
           <p className="mt-2 text-sm leading-7">
             This page helps owners and operators compare modern fitness studio platforms side-by-side.
             Start with your must-haves—booking flow, payments, memberships—then narrow to vendors that
-            satisfy <em>all</em> requirements. Every selection you add reduces the list to software that can ship your exact workflow.
+            satisfy <em>all</em> requirements. Every selection you add redirects to a dedicated, indexable URL.
           </p>
 
           {overviewBullets.length > 0 && (
@@ -407,67 +451,57 @@ export default async function Page({ params, searchParams }: PageProps) {
           </ul>
         </section>
 
-        {/* =================== URL FILTER INSTRUCTIONS (kept EXACT) =================== */}
+        {/* =================== NEW: Checkbox Form (SSR submit -> redirect to path) =================== */}
         <section className="mb-8 border border-black/10 rounded-lg p-5 bg-white">
-          <h2 className="text-xl font-semibold mb-2">Filter this page via URL (AND-only)</h2>
+          <h2 className="text-xl font-semibold mb-2">Filter by capabilities</h2>
+          <form action={applyFilters}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {CATEGORIES.map((cat) => {
+                const selected = new Set(selections.byCat[cat.key]?.and ?? []);
+                return (
+                  <fieldset key={cat.key} className="border border-black/10 rounded-md p-3">
+                    <legend className="font-medium">{cat.label}</legend>
+                    <p className="text-xs opacity-75 mt-1">
+                      {CATEGORY_DEFINITIONS[cat.key] ?? "Select all that apply."}
+                    </p>
+                    <ul className="mt-2 space-y-2">
+                      {cat.options.map((opt) => (
+                        <li key={opt.slug} className="flex items-start gap-2">
+                          <input
+                            id={`${cat.key}__${opt.slug}`}
+                            type="checkbox"
+                            name={cat.key}
+                            value={opt.slug}
+                            defaultChecked={selected.has(opt.slug)}
+                            className="mt-1"
+                          />
+                          <label htmlFor={`${cat.key}__${opt.slug}`} className="text-sm">
+                            <code>{opt.slug}</code> — {opt.label.replace(/&nbsp;/g, " ")}
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  </fieldset>
+                );
+              })}
+            </div>
 
-          <p className="text-sm leading-6">
-            <strong>Between categories it is always AND.</strong> Within a category it is also AND.
-            To require multiple options in the same category, <strong>repeat the parameter</strong> with one slug per entry.
-          </p>
-
-          <h3 className="text-base font-semibold mt-3">Examples</h3>
-          <ul className="list-disc pl-6 text-sm mt-2 space-y-1">
-            <li>
-              Show vendors that support <em>Apple&nbsp;Pay</em>:
-              <br />
-              <code>/?payment-methods=apple-pay</code>
-            </li>
-            <li>
-              Require <em>Apple&nbsp;Pay</em> <strong>and</strong> <em>Google&nbsp;Pay</em> (same category, AND):
-              <br />
-              <code>/?payment-methods=apple-pay&amp;payment-methods=google-pay</code>
-            </li>
-            <li>
-              Require <em>Apple&nbsp;Pay</em>, <em>Google&nbsp;Pay</em> <strong>and</strong> the gateway <em>Stripe</em> (AND across categories):
-              <br />
-              <code>/?payment-methods=apple-pay&amp;payment-methods=google-pay&amp;payment-gateways=stripe</code>
-            </li>
-            <li>
-              Another example: require <em>Facebook Ads pixel</em> and <em>Google Ads conversion</em>, plus <em>Apple&nbsp;Pay</em>:
-              <br />
-              <code>/?ads-and-tracking=facebook-ads-pixel&amp;ads-and-tracking=google-ads-conversion&amp;payment-methods=apple-pay</code>
-            </li>
-          </ul>
-
-          <p className="text-sm leading-6 mt-3">
-            <strong>Meaning of each filter:</strong> Using <code>payment-methods=apple-pay</code> sets the filter to “YES for <code>apple-pay</code>”.
-            Repeat the same key to add more required options in that category.
-          </p>
-
-          <h3 className="text-lg font-semibold mt-5">Categories &amp; options (slugs &amp; descriptions)</h3>
-
-          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {CATEGORIES.map((cat) => (
-              <div key={cat.key} className="border border-black/10 rounded-md p-3">
-                <h4 className="font-medium">
-                  <code>{cat.key}</code>
-                </h4>
-                <p className="text-xs opacity-75 mt-1">
-                  {CATEGORY_DEFINITIONS[cat.key] ?? "See options below."}
-                </p>
-                <ul className="list-disc pl-5 text-sm mt-2 space-y-1">
-                  {cat.options.map((opt) => (
-                    <li key={opt.slug}>
-                      <code>{opt.slug}</code> — {opt.label.replace(/&nbsp;/g, " ")}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                type="submit"
+                className="px-3 py-2 rounded-md border border-black/10 bg-black text-white text-sm"
+              >
+                Update results
+              </button>
+              <a
+                href="/best-fitness-studio-software"
+                className="text-sm underline underline-offset-4"
+              >
+                Clear all
+              </a>
+            </div>
+          </form>
         </section>
-        {/* =================== END INSTRUCTIONS =================== */}
 
         {/* ======== SEO-Friendly Vendor Summaries (textual, crawlable) ======== */}
         <section className="mb-8">
@@ -527,8 +561,6 @@ export default async function Page({ params, searchParams }: PageProps) {
           )}
         </section>
 
-  
-
         {/* ======== Buying guide + methodology (SEO content) ======== */}
         <section className="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="border border-black/10 rounded-lg p-5">
@@ -567,14 +599,15 @@ export default async function Page({ params, searchParams }: PageProps) {
             <div>
               <h3 className="font-medium">How do I filter this page?</h3>
               <p>
-                Repeat the same category parameter to require multiple options. Example:
-                <code className="ml-1">?payment-methods=apple-pay&amp;payment-methods=google-pay&amp;payment-gateways=stripe</code>.
+                Use the checkboxes above and click <em>Update results</em>. Each combination has its own URL (no query strings),
+                so it’s easy to share, index, and compare.
               </p>
             </div>
             <div>
               <h3 className="font-medium">What does selecting an option do?</h3>
               <p>
-                Using <code>payment-methods=apple-pay</code> filters to vendors that support Apple&nbsp;Pay (sets that option to YES).
+                Selecting an option (e.g., <code>payment-methods = Apple&nbsp;Pay</code>) filters to vendors that support it.
+                All selections are combined with AND logic, across and within categories.
               </p>
             </div>
             <div>
@@ -586,6 +619,38 @@ export default async function Page({ params, searchParams }: PageProps) {
               <p>To keep the page scannable, only the columns for categories you filtered remain visible.</p>
             </div>
           </div>
+        </section>
+
+        {/* =================== NEW: Crawl Hints (explicit links to expansion pages) =================== */}
+        <section className="mt-10 border border-black/10 rounded-lg p-5">
+          <h2 className="text-xl font-semibold">Explore related filtered pages</h2>
+          <p className="mt-2 text-sm">
+            From this page, you can jump to any closely-related combination. Each link below adds exactly one additional
+            requirement to your current selection (AND logic). This helps you compare “what if we also required …”.
+          </p>
+
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {expansionGroups.map((g) => (
+              <div key={g.catKey} className="border border-black/10 rounded-md p-3">
+                <h3 className="font-medium">{g.catLabel}</h3>
+                {g.links.length === 0 ? (
+                  <p className="text-sm opacity-75 mt-1">All options in this category are already selected.</p>
+                ) : (
+                  <ul className="list-disc pl-5 text-sm mt-2 space-y-1">
+                    {g.links.map((l) => (
+                      <li key={l.href}>
+                        <a href={l.href} className="underline underline-offset-4">{l.text}</a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <p className="mt-4 text-xs opacity-70">
+            Tip: Search engines and scrapers can navigate the entire comparison space via these links with no client-side code.
+          </p>
         </section>
       </section>
     </main>

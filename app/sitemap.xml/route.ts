@@ -1,3 +1,5 @@
+//app/sitemap.xml
+
 import { NextResponse } from "next/server";
 import { CATEGORIES } from "@/lib/categories";
 import { buildCanonicalPath, canonicalSegmentsFromSelections } from "@/lib/url";

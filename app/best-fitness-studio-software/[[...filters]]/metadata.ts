@@ -1,3 +1,5 @@
+//app/best-fitness-studio-software/[[...filters]]/metadata.ts
+
 import type { Metadata } from "next";
 import {
   parseSelectionsFromPath,
