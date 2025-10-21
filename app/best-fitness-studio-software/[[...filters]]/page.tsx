@@ -122,6 +122,22 @@ function NoteWithLinks({ text }: { text: string }) {
   return <>{nodes}</>;
 }
 
+/* ===== Additional info cell (always show this column) ===== */
+function AdditionalInfoCell({ text }: { text?: string }) {
+  if (!text) return <>—</>;
+  const items = text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  if (items.length === 0) return <>—</>;
+  return (
+    <ul className="list-disc pl-5 space-y-1">
+      {items.map((line, i) => (
+        <li key={`addl-${i}`}>
+          <NoteWithLinks text={line} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /* ========================== SEO helpers ========================== */
 const optionLabel = (catKey: string, slug: string) => {
   const cat = CATEGORIES.find((c) => c.key === catKey);
@@ -508,6 +524,7 @@ export default async function Page({ params, searchParams }: PageProps) {
                   <thead className="bg-black/5">
                     <tr>
                       <th className="text-left font-semibold p-3 w-1/5">Vendor</th>
+                      <th className="text-left font-semibold p-3">Additional info</th>
                       {visibleCats.map((cat) => (
                         <th key={`head-${cat.key}`} className="text-left font-semibold p-3">
                           {cat.label}
@@ -520,6 +537,9 @@ export default async function Page({ params, searchParams }: PageProps) {
                       <tr key={`tr-${row.id}`} className="border-t border-black/10 align-top">
                         <td className="p-3 whitespace-nowrap">
                           <a href={row.url} className="underline underline-offset-4 font-medium">{row.name}</a>
+                        </td>
+                        <td className="p-3">
+                          <AdditionalInfoCell text={row.additionalInfo} />
                         </td>
                         {visibleCats.map((cat) => {
                           const selectedSlugs = selections.byCat[cat.key]?.and ?? [];

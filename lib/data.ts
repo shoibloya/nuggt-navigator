@@ -29,6 +29,7 @@ export const ROWS: Row[] = [
       "Lead Management connects directly to Facebook and Google Ads lead forms so ad leads flow into the pipeline automatically. (support.mindbodyonline.com)",
       "Reserve with Google and Facebook/Instagram “Book Now” give strong marketplace/channel distribution. (support.mindbodyonline.com)",
       "Family & corporate account tools (book/manage for dependents; company credit workflows) are built in. (support.mindbodyonline.com)",
+      "Right now they are running 30% discount for Malaysia only."
     ].join("\n"),
     optionNotes: {
       "booking-channels": [
