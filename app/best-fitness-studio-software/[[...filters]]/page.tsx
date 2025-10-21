@@ -212,17 +212,8 @@ function FocusedCategoryCell({
   );
 }
 
-/** Detect real-time ChatGPT (signed) using already-fetched headers */
-function isChatGPTSigned(h: Headers): boolean {
-  const sig = h.get("signature");
-  const sigInput = h.get("signature-input");
-  const rawAgent = h.get("signature-agent");
-  const agent = rawAgent?.trim().replace(/^"(.*)"$/, "$1"); // strip optional quotes
-  return Boolean(sig && sigInput && agent === "https://chatgpt.com");
-}
-
 export default async function Page({ params, searchParams }: PageProps) {
-  // IMPORTANT: await dynamic API
+  // MUST await dynamic API in App Router
   const h = await headers();
   const ua = h.get("user-agent") || "";
   const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
@@ -230,37 +221,34 @@ export default async function Page({ params, searchParams }: PageProps) {
   const resolvedParams = await params;
   await searchParams; // unused
 
-  const incomingPath =
-    resolvedParams.filters?.length
-      ? `/best-fitness-studio-software/${resolvedParams.filters.join("/")}`
-      : "/best-fitness-studio-software";
-
-  // Log ONLY signed ChatGPT fetches; skip root to avoid duplicate with middleware root hit.
-  if (isChatGPTSigned(h) && incomingPath !== "/best-fitness-studio-software") {
-    const payload = {
-      event: "bot_scrape",
-      where: "page.tsx",
-      method: "GET",
-      path: incomingPath,
-      agent: "https://chatgpt.com",
-      ip,
-      ts: new Date().toISOString(),
-      signature_present: true,
-      signature_input_present: true,
-      ua, // optional auditing
-    };
-    // eslint-disable-next-line no-console
-    console.log("[event=bot_scrape]", JSON.stringify(payload));
-  }
+  slog("incoming params.filters", resolvedParams.filters ?? []);
 
   // Parse from path only (path = truth)
   const selections = parseSelectionsFromPath(resolvedParams.filters);
   const canonicalSegs = canonicalSegmentsFromSelections(selections);
   const canonicalPath = buildCanonicalPath(canonicalSegs);
+  const incomingPath =
+    resolvedParams.filters?.length
+      ? `/best-fitness-studio-software/${resolvedParams.filters.join("/")}`
+      : "/best-fitness-studio-software";
 
   if (incomingPath !== canonicalPath) {
     slog("redirecting (path canonicalize)", canonicalPath);
     permanentRedirect(canonicalPath);
+  }
+
+  // Detect signed ChatGPT agent (live, in-chat fetch) and log once per page render
+  {
+    const sig = h.get("signature");
+    const sigInput = h.get("signature-input");
+    const rawAgent = h.get("signature-agent");
+    const agent = rawAgent?.trim().replace(/^"(.*)"$/, "$1");
+    if (sig && sigInput && agent === "https://chatgpt.com") {
+      // eslint-disable-next-line no-console
+      console.log(
+        `vercel_event_name=bot_scrape bot=chatgpt_agent_signed path="${canonicalPath}" ip="${ip}" ua="${ua}"`
+      );
+    }
   }
 
   // SEO text

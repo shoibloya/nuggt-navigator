@@ -24,19 +24,36 @@ function parseRawQueryString(raw: string): Record<string, string[]> {
   return out;
 }
 
-/** Only care about real-time ChatGPT Agent (signed) */
-function isChatGPTSigned(req: NextRequest) {
+/** Minimal signed ChatGPT agent detector for logging */
+function logChatGPTSignedHit(req: NextRequest) {
   const sig = req.headers.get("signature");
   const sigInput = req.headers.get("signature-input");
   const rawAgent = req.headers.get("signature-agent");
-  const agent = rawAgent?.trim().replace(/^"(.*)"$/, "$1"); // strip optional quotes
-  return Boolean(sig && sigInput && agent === "https://chatgpt.com");
+  const agent = rawAgent?.trim().replace(/^"(.*)"$/, "$1"); // Signature-Agent is usually quoted
+  if (sig && sigInput && agent === "https://chatgpt.com") {
+    const ua = req.headers.get("user-agent") || "";
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const path = req.nextUrl.pathname + req.nextUrl.search;
+
+    // Single, structured log line for Vercel Functions log stream
+    // You can filter by `vercel_event_name=bot_scrape` in Logs.
+    // NOTE: We purposely do *not* guess names. This fires only for signed ChatGPT agent requests.
+    // eslint-disable-next-line no-console
+    console.log(
+      `vercel_event_name=bot_scrape bot=chatgpt_agent_signed path="${path}" ip="${ip}" ua="${ua}"`
+    );
+  }
 }
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Debug: keep your existing logging
+  // Log signed ChatGPT agent *for all subpaths* under this collection.
+  if (pathname.startsWith("/best-fitness-studio-software")) {
+    logChatGPTSignedHit(req);
+  }
+
+  // Debug: keep your existing request logging
   // eslint-disable-next-line no-console
   console.log("[middleware] req.url:", req.url);
   // eslint-disable-next-line no-console
@@ -47,30 +64,6 @@ export function middleware(req: NextRequest) {
   console.log("[middleware] nextUrl.search:", req.nextUrl.search);
   // eslint-disable-next-line no-console
   console.log("[middleware] searchParams.toString():", req.nextUrl.searchParams.toString());
-
-  // --- ChatGPT Agent logging (ONLY when signed) ---
-  if (isChatGPTSigned(req)) {
-    const ip =
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-      "unknown";
-    const payload = {
-      event: "bot_scrape",
-      where: "middleware",
-      method: req.method,
-      path: pathname,
-      fullUrl: req.nextUrl.href,
-      agent: "https://chatgpt.com",
-      ip,
-      ts: new Date().toISOString(),
-      // keep only what's necessary to audit:
-      signature_present: true,
-      signature_input_present: true,
-    };
-    // Single, filterable line in Vercel Logs:
-    // eslint-disable-next-line no-console
-    console.log("[event=bot_scrape]", JSON.stringify(payload));
-  }
-  // -----------------------------------------------
 
   // Only act on the collection root (query -> canonical path)
   if (!pathname.startsWith("/best-fitness-studio-software")) {
@@ -111,5 +104,6 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/best-fitness-studio-software", "/best-fitness-studio-software/"],
+  // IMPORTANT: match *all* subpaths so filter pages also log bot hits
+  matcher: ["/best-fitness-studio-software/:path*"],
 };
