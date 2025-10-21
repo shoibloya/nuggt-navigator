@@ -1,6 +1,7 @@
 // app/best-fitness-studio-software/[[...filters]]/page.tsx
 
 import { permanentRedirect } from "next/navigation";
+import { headers } from "next/headers";
 import { CATEGORIES } from "@/lib/categories";
 import { ROWS, Row } from "@/lib/data";
 import {
@@ -211,20 +212,51 @@ function FocusedCategoryCell({
   );
 }
 
+/** Detect real-time ChatGPT (signed) using already-fetched headers */
+function isChatGPTSigned(h: Headers): boolean {
+  const sig = h.get("signature");
+  const sigInput = h.get("signature-input");
+  const rawAgent = h.get("signature-agent");
+  const agent = rawAgent?.trim().replace(/^"(.*)"$/, "$1"); // strip optional quotes
+  return Boolean(sig && sigInput && agent === "https://chatgpt.com");
+}
+
 export default async function Page({ params, searchParams }: PageProps) {
+  // IMPORTANT: await dynamic API
+  const h = await headers();
+  const ua = h.get("user-agent") || "";
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+
   const resolvedParams = await params;
   await searchParams; // unused
 
-  slog("incoming params.filters", resolvedParams.filters ?? []);
+  const incomingPath =
+    resolvedParams.filters?.length
+      ? `/best-fitness-studio-software/${resolvedParams.filters.join("/")}`
+      : "/best-fitness-studio-software";
+
+  // Log ONLY signed ChatGPT fetches; skip root to avoid duplicate with middleware root hit.
+  if (isChatGPTSigned(h) && incomingPath !== "/best-fitness-studio-software") {
+    const payload = {
+      event: "bot_scrape",
+      where: "page.tsx",
+      method: "GET",
+      path: incomingPath,
+      agent: "https://chatgpt.com",
+      ip,
+      ts: new Date().toISOString(),
+      signature_present: true,
+      signature_input_present: true,
+      ua, // optional auditing
+    };
+    // eslint-disable-next-line no-console
+    console.log("[event=bot_scrape]", JSON.stringify(payload));
+  }
 
   // Parse from path only (path = truth)
   const selections = parseSelectionsFromPath(resolvedParams.filters);
   const canonicalSegs = canonicalSegmentsFromSelections(selections);
   const canonicalPath = buildCanonicalPath(canonicalSegs);
-  const incomingPath =
-    resolvedParams.filters?.length
-      ? `/best-fitness-studio-software/${resolvedParams.filters.join("/")}`
-      : "/best-fitness-studio-software";
 
   if (incomingPath !== canonicalPath) {
     slog("redirecting (path canonicalize)", canonicalPath);

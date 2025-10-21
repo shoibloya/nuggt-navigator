@@ -1,3 +1,5 @@
+// middleware.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import {
   parseSelectionsFromSearchParams,
@@ -22,10 +24,19 @@ function parseRawQueryString(raw: string): Record<string, string[]> {
   return out;
 }
 
+/** Only care about real-time ChatGPT Agent (signed) */
+function isChatGPTSigned(req: NextRequest) {
+  const sig = req.headers.get("signature");
+  const sigInput = req.headers.get("signature-input");
+  const rawAgent = req.headers.get("signature-agent");
+  const agent = rawAgent?.trim().replace(/^"(.*)"$/, "$1"); // strip optional quotes
+  return Boolean(sig && sigInput && agent === "https://chatgpt.com");
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Debug: show everything we can about the incoming request
+  // Debug: keep your existing logging
   // eslint-disable-next-line no-console
   console.log("[middleware] req.url:", req.url);
   // eslint-disable-next-line no-console
@@ -36,6 +47,30 @@ export function middleware(req: NextRequest) {
   console.log("[middleware] nextUrl.search:", req.nextUrl.search);
   // eslint-disable-next-line no-console
   console.log("[middleware] searchParams.toString():", req.nextUrl.searchParams.toString());
+
+  // --- ChatGPT Agent logging (ONLY when signed) ---
+  if (isChatGPTSigned(req)) {
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      "unknown";
+    const payload = {
+      event: "bot_scrape",
+      where: "middleware",
+      method: req.method,
+      path: pathname,
+      fullUrl: req.nextUrl.href,
+      agent: "https://chatgpt.com",
+      ip,
+      ts: new Date().toISOString(),
+      // keep only what's necessary to audit:
+      signature_present: true,
+      signature_input_present: true,
+    };
+    // Single, filterable line in Vercel Logs:
+    // eslint-disable-next-line no-console
+    console.log("[event=bot_scrape]", JSON.stringify(payload));
+  }
+  // -----------------------------------------------
 
   // Only act on the collection root (query -> canonical path)
   if (!pathname.startsWith("/best-fitness-studio-software")) {
